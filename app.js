@@ -14,6 +14,16 @@ const LS = {
 let cfg = LS.get("gh.cfg", { key: "", athlete: "0" });
 let db = LS.get("gh.db", null);            // {wellness:[...asc by date], acts:[...desc by date], at, demo}
 let tab = LS.get("gh.tab", "today");
+// Skin = CSS token set on <html data-skin>; ?skin=x in the URL overrides (for previews/screenshots).
+const SKIN_BAR = { cyber: "#06080c", synth: "#10051c", term: "#020802", pro: "#f2f3f5" };
+function setSkin(s) {
+  if (!SKIN_BAR[s]) s = "cyber";
+  document.documentElement.dataset.skin = s;
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", SKIN_BAR[s]);
+  document.querySelectorAll("[data-skin]").forEach(b => b.classList && b.tagName === "BUTTON" && b.classList.toggle("on", b.dataset.skin === s));
+  return s;
+}
+let skin = setSkin((location.search.match(/[?&]skin=(\w+)/) || [])[1] || LS.get("gh.skin", "cyber"));
 let fitRange = 90;
 
 /* ---------- dates & formatting ---------- */
@@ -164,7 +174,10 @@ function readiness() {
   if (last.rhr && rhrs.length >= 7) { const m = mean(rhrs), up = Math.max(3, sd(rhrs)); if (last.rhr > m + up) flags.push(`Resting HR ${last.rhr} (usual ${r0(m)})`); else good.push(`Resting HR normal (${last.rhr})`); }
   if (last.hrv && hrvs.length >= 7) { const m = mean(hrvs), dn = sd(hrvs); if (last.hrv < m - dn) flags.push(`HRV ${r0(last.hrv)} is low (usual ${r0(m)})`); else good.push(`HRV normal (${r0(last.hrv)})`); }
   if (last.sleep) { if (last.sleep < 6 * 3600) flags.push(`Short sleep: ${hm(last.sleep)}`); else good.push(`Slept ${hm(last.sleep)}`); }
-  const tsb = last.ctl != null && last.atl != null ? last.ctl - last.atl : null;
+  // Form only counts LOGGED workouts. Unlogged running/gym made it meaningless, so it's ignored
+  // until there are 8+ logged sessions in the last 6 weeks (enough for the 42-day fitness average to mean something).
+  const logged = db.acts.filter(a => daysAgo(a.date.slice(0, 10)) <= 42).length;
+  const tsb = logged >= 8 && last.ctl != null && last.atl != null ? last.ctl - last.atl : null;
   if (tsb != null) { if (tsb < -25) flags.push(`Heavy fatigue: form ${r0(tsb)}`); else if (tsb > -10) good.push(`Fresh: form ${r0(tsb)}`); }
   // No baseline yet (new account / no history): don't pretend; say how many days are still needed.
   if (rhrs.length < 7 && hrvs.length < 7) return { last, flags, good, tsb, level: "calib", need: 7 - Math.max(rhrs.length, hrvs.length) };
@@ -180,7 +193,7 @@ function readiness() {
 }
 // Neon progress ring for the readiness score (stroke-dasharray trick: circumference × fraction).
 const ring = (val, color, label) => { const c = 2 * Math.PI * 46, f = val == null ? 0 : val / 100;
-  return `<div class="ring"><svg viewBox="0 0 108 108"><circle cx="54" cy="54" r="46" fill="none" stroke="rgba(34,227,255,.1)" stroke-width="8"/>
+  return `<div class="ring"><svg viewBox="0 0 108 108"><circle cx="54" cy="54" r="46" fill="none" stroke="rgba(var(--acc-rgb),.1)" stroke-width="8"/>
     <circle cx="54" cy="54" r="46" fill="none" stroke="${color}" stroke-width="8" stroke-linecap="round" stroke-dasharray="${(c * f).toFixed(1)} ${c.toFixed(1)}" style="filter:drop-shadow(0 0 6px ${color})"/></svg>
     <div class="num" style="color:${color};text-shadow:0 0 12px ${color}"><div>${val == null ? "··" : val}<small>${label}</small></div></div></div>`; };
 function renderToday(v) {
@@ -188,22 +201,57 @@ function renderToday(v) {
   let h = "";
   // Stale-data nudge: the phone sync is also what refreshes the watch's satellite data (faster GPS lock).
   if (latest && daysAgo(latest.d) >= 2) h += `<div class="warnbar"><b>Watch last synced ${daysAgo(latest.d)} days ago.</b> Open Garmin Connect on your phone and let it sync, which also refreshes GPS satellite data so your next ride locks faster. Then tap Sync here.</div>`;
+  const rides = db.acts.filter(isRide);
   if (R) {
     const V = { hard: ["Go hard", css("--good")], moderate: ["Moderate", css("--warn")], easy: ["Take it easy", css("--bad")], calib: ["Calibrating", css("--s1")] }[R.level];
     const notes = R.level === "calib" ? [`<li>Learning your normal: ${R.need} more day${R.need === 1 ? "" : "s"} of watch data needed.</li>`] : [];
     h += `<div class="card"><h2>Readiness · ${short(R.last.d)}</h2><div class="verdict">${ring(R.score ?? null, V[1], R.level === "calib" ? "WAIT" : "READY")}<div><h3 style="color:${V[1]}">${V[0]}</h3>
-      <ul>${notes.join("")}${R.flags.map(f => `<li class="flag">${esc(f)}</li>`).join("")}${R.good.map(f => `<li>${esc(f)}</li>`).join("")}</ul></div></div></div>`;
+      <ul>${notes.join("")}${R.flags.map(f => `<li class="flag">${esc(f)}</li>`).join("")}${R.good.map(f => `<li>${esc(f)}</li>`).join("")}</ul></div></div>
+      <div class="plan"><span>Today's plan</span>${esc(suggestion(R.level, rides))}</div></div>`;
   }
-  const w = latest || {}, f = [...W].reverse().find(x => x.ctl != null) || {}, vo = [...W].reverse().find(x => x.vo2) || {};
-  const tile = (val, lab, sub) => `<div class="tile"><span>${lab}</span><b>${val}</b>${sub ? `<small>${sub}</small>` : ""}</div>`;
-  h += `<div class="card"><h2>Body</h2><div class="tiles">
-    ${tile(r0(w.rhr), "Resting HR", "bpm")}${W.some(x => x.hrv) ? tile(r0(w.hrv), "HRV", "ms") : tile(w.floors ?? "–", "Floors", "climbed")}${tile(w.sleep ? hm(w.sleep) : "–", "Sleep", w.sleepScore ? `score ${w.sleepScore}` : "")}
-    ${tile(r0(f.ctl), "Fitness", "CTL")}${tile(r0(f.atl), "Fatigue", "ATL")}${tile(f.ctl != null ? r0(f.ctl - f.atl) : "–", "Form", "fitness − fatigue")}
-    ${tile(w.steps != null ? w.steps.toLocaleString() : "–", "Steps", "")}${tile(vo.vo2 ? vo.vo2.toFixed(0) : "–", "VO2max", "")}${tile(w.weight ? w.weight.toFixed(1) : "–", "Weight", "kg")}
-  </div></div>`;
-  const ride = db.acts.find(isRide);
-  if (ride) h += `<div class="card"><h2>Last ride</h2>${rideButton(ride)}</div>`;
+  // Engine: fitness read from the BODY, so it includes the running/gym that was never logged.
+  const vo = W.filter(x => x.vo2), voNow = vo.at(-1), vo90 = vo.find(x => daysAgo(x.d) <= 90);
+  const rhr7 = avgDays(W, "rhr", 0, 6), rhr90 = avgDays(W, "rhr", 84, 97), st7 = avgDays(W, "steps", 0, 6), st14 = avgDays(W, "steps", 7, 13);
+  const sl7 = avgDays(W, "sleep", 0, 6), sl14 = avgDays(W, "sleep", 7, 13), w = latest || {};
+  h += `<div class="card"><h2>Engine</h2><div class="tiles">
+    ${dTile(voNow ? voNow.vo2.toFixed(0) : "–", "VO2max", voNow && vo90 && vo90 !== voNow ? voNow.vo2 - vo90.vo2 : null, false, "vs 90 days", v => v.toFixed(1))}
+    ${dTile(rhr7 ? r0(rhr7) : "–", "Resting HR", rhr7 && rhr90 ? rhr7 - rhr90 : null, true, "vs 3 months", v => r0(Math.abs(v)) + " bpm")}
+    ${dTile(st7 ? r0(st7).toLocaleString() : "–", "Steps/day", st7 && st14 ? (st7 - st14) / st14 * 100 : null, false, "vs last week", v => r0(Math.abs(v)) + "%")}
+    ${dTile(w.sleep ? hm(w.sleep) : "–", "Last night", null, false, w.sleepScore ? `score ${w.sleepScore}` : "")}
+    ${dTile(sl7 ? hm(sl7) : "–", "Sleep avg", sl7 && sl14 ? (sl7 - sl14) / 60 : null, false, "vs last week", v => r0(Math.abs(v)) + " min")}
+    ${dTile(w.floors ?? "–", "Floors", null, false, "today")}
+  </div><p class="muted note">Read from your body, not from logged workouts, so the running and gym you never recorded still count. Falling resting HR and rising VO2max = getting fitter.</p></div>`;
+  // Riding progress: you're new to the bike, so track the first-months curve (distance, speed, longest).
+  if (rides.length) {
+    const tot = rides.reduce((s, a) => s + (a.dist || 0), 0), longest = Math.max(...rides.map(a => a.dist || 0));
+    const wk = rides.filter(a => daysAgo(a.date.slice(0, 10)) < 7), wkKm = wk.reduce((s, a) => s + (a.dist || 0), 0), wkT = wk.reduce((s, a) => s + (a.time || 0), 0);
+    const last = rides[0], prev = rides.slice(1, 11).filter(a => a.spd), avgPrev = prev.length ? mean(prev.map(a => a.spd)) : null;
+    const tile = (val, lab, sub) => `<div class="tile"><span>${lab}</span><b>${val}</b>${sub ? `<small>${sub}</small>` : ""}</div>`;
+    h += `<div class="card"><h2>Riding</h2><div class="tiles">
+      ${tile(wk.length, "This week", `${km(wkKm)} km · ${hm(wkT)}`)}${tile(rides.length, "Rides", `${km(tot)} km total`)}${tile(km(longest), "Longest", "km")}
+    </div>${rideButton(last)}${avgPrev ? `<p class="muted note">Last ride ${kmh(last.spd)} km/h vs your recent average ${kmh(avgPrev)} km/h (${last.spd >= avgPrev ? "▲ faster" : "▼ slower"}).</p>` : ""}</div>`;
+  }
   v.innerHTML = h;
+}
+// Mean of a wellness field over days [fromAgo..toAgo] back from today (ignores empty days).
+function avgDays(W, f, fromAgo, toAgo) { const v = W.filter(w => { const a = daysAgo(w.d); return a >= fromAgo && a <= toAgo; }).map(w => w[f]).filter(x => x); return v.length ? mean(v) : null; }
+// Tile with a change arrow. downIsGood flips the colour (resting HR falling = good). Arrow + words, never colour alone.
+function dTile(val, lab, diff, downIsGood, sub, fmt) {
+  let ch = sub ? `<small>${sub}</small>` : "";
+  if (diff != null && fmt) {
+    const flat = Math.abs(diff) < 0.05, good = downIsGood ? diff < 0 : diff > 0;
+    ch = `<small class="${flat ? "" : good ? "up-good" : "up-bad"}">${flat ? "■ steady" : (diff > 0 ? "▲ " : "▼ ") + fmt(diff)} ${sub}</small>`;
+  }
+  return `<div class="tile"><span>${lab}</span><b>${val}</b>${ch}</div>`;
+}
+// One-line plan for a new rider: build distance ~10-15% at a time, easy when the body says so.
+function suggestion(level, rides) {
+  const longest = rides.length ? Math.max(...rides.map(a => a.dist || 0)) / 1000 : 0;
+  if (level === "easy") return "Rest, a walk, or 30 min of very easy spinning. Your body is still recovering.";
+  if (level === "moderate") return "Steady 45–60 min ride at a pace where you can still talk (zone 2).";
+  if (level === "calib") return "Ride by feel; the app is still learning your normal resting HR.";
+  if (!rides.length) return "Good day for a first proper ride: 45–60 min, easy to steady.";
+  return `Good day to push: try a ride of ~${Math.round(longest * 1.15)} km (longest so far ${longest.toFixed(1)} km), or add a few hard 3-min efforts.`;
 }
 
 /* ---------- Rides ---------- */
@@ -365,6 +413,26 @@ function render() {
   if (!db) { v.innerHTML = `<div class="card"><h2>Welcome</h2><p>Connect Intervals.icu in Settings (⚙) to see your Garmin data, or try the demo first.</p><button class="primary" id="goSet">Open settings</button> <button id="goDemo">Try demo data</button></div>`; return; }
   if (db.demo) status("Demo data. Add your Intervals.icu key in Settings for your own.");
   ({ today: renderToday, rides: renderRides, fitness: renderFitness, sleep: renderSleep })[tab](v);
+  animateIn(v);
+}
+// Shared motion for every skin: numbers count up, the readiness ring fills. Skipped with reduced motion.
+function animateIn(root) {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  root.querySelectorAll(".tile b, .ring .num > div").forEach(el => {
+    const node = el.firstChild; if (!node || node.nodeType !== 3) return;
+    const txt = node.textContent.trim(); if (!/^[\d,.]+$/.test(txt)) return;     // only plain numbers, not "6h 14m"
+    const target = parseFloat(txt.replace(/,/g, "")), dec = (txt.split(".")[1] || "").length, comma = txt.includes(",");
+    const t0 = performance.now(), dur = 700;
+    const step = t => { const p = Math.min(1, (t - t0) / dur), e = 1 - (1 - p) ** 3, v = target * e;
+      node.textContent = comma ? Math.round(v).toLocaleString() : v.toFixed(dec); if (p < 1) requestAnimationFrame(step); };
+    requestAnimationFrame(step);
+  });
+  root.querySelectorAll(".ring circle + circle").forEach(c => {
+    const full = c.getAttribute("stroke-dasharray"); const C = full.split(" ")[1];
+    // via style, not the attribute: CSS transitions reliably fire on style changes only
+    c.style.strokeDasharray = `0 ${C}`; c.style.transition = "stroke-dasharray 1.1s cubic-bezier(.2,.8,.2,1)";
+    requestAnimationFrame(() => requestAnimationFrame(() => c.style.strokeDasharray = full));
+  });
 }
 function openSettings() {
   $("#key").value = cfg.key; $("#ath").value = cfg.athlete;
@@ -382,6 +450,7 @@ document.addEventListener("click", e => {
   else if (t.id === "setClose") $("#settings").classList.remove("open");
   else if (t.id === "rideClose") { $("#rideSheet").classList.remove("open"); $("#rideBody").innerHTML = ""; }
   else if (t.id === "demoBtn" || t.id === "goDemo") useDemo();
+  else if (t.dataset.skin) { skin = setSkin(t.dataset.skin); LS.set("gh.skin", skin); render(); }   // re-render: chart colours are read from CSS
   else if (t.id === "saveBtn") {
     cfg = { key: $("#key").value.trim(), athlete: $("#ath").value.trim() || "0" }; LS.set("gh.cfg", cfg);
     $("#settings").classList.remove("open"); if (db && db.demo) db = null; sync();
