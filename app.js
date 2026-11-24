@@ -15,7 +15,7 @@ let cfg = LS.get("gh.cfg", { key: "", athlete: "0" });
 let db = LS.get("gh.db", null);            // {wellness:[...asc by date], acts:[...desc by date], at, demo}
 let tab = LS.get("gh.tab", "today");
 // Skin = CSS token set on <html data-skin>; ?skin=x in the URL overrides (for previews/screenshots).
-const SKIN_BAR = { term: "#020802", game: "#0b0d26", belay: "#15171a", synth: "#10051c", pro: "#f2f3f5" };
+const SKIN_BAR = { term: "#0b0d10", game: "#0b0d26", synth: "#0a0218", pro: "#f2f3f5" };
 // Per-skin vocabulary: the same screen speaks plain English, shell or RPG. Missing keys fall back to base.
 const WORDS = {
   base: { brand: "GARMIN·HUB", today: "Today", rides: "Rides", fitness: "Fitness", sleep: "Sleep",
@@ -32,13 +32,10 @@ const WORDS = {
     vo2: "STA·VO2max", rhr: "DEF·Rest HR", steps: "AGI·Steps", night: "MANA·Sleep", sleepAvg: "MANA avg", floors: "Floors",
     week: "This week", nRides: "Quests", longest: "Longest",
     hard: "Full HP! Attack!", moderate: "Half HP. Grind.", easy: "Low HP. Rest at the inn.", calib: "Loading save..." },
-  // "Beta" = climbers' word for advice on how to do a route.
-  belay: { brand: "ON BELAY", readiness: "Today's circuit", plan: "Beta",
-    hard: "Climb on", moderate: "Top-rope day", easy: "Take", calib: "On belay?" },
 };
 const T = k => (WORDS[skin] && WORDS[skin][k]) || WORDS.base[k];
 function setSkin(s) {
-  if (!SKIN_BAR[s]) s = "term";   // also migrates the removed cyber/belay skins
+  if (!SKIN_BAR[s]) s = "term";   // also migrates removed skins (cyber, belay)
   document.documentElement.dataset.skin = s;
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", SKIN_BAR[s]);
   document.querySelectorAll("[data-skin]").forEach(b => b.classList && b.tagName === "BUTTON" && b.classList.toggle("on", b.dataset.skin === s));
@@ -232,8 +229,6 @@ function renderToday(v) {
     const sc = R.score ?? null;
     const widget = skin === "term"
       ? `<pre class="ascii" style="--lvl:${col}" data-fill="${sc ?? 0}">${asciiBar(sc ?? 0)} ${sc == null ? "--" : sc}%<small>readiness score / 100</small></pre>`
-      : skin === "belay"
-      ? circuits(sc)
       : skin === "game"
       ? `<div style="--lvl:${col}"><div class="barhead"><span>❤ HP</span><b>${sc == null ? "??" : sc}/100</b></div><div class="bar8${R.level === "easy" ? " low" : ""}"><i data-w="${sc ?? 0}" style="width:${sc ?? 0}%"></i></div></div>`
       : ring(sc, col, R.level === "calib" ? "WAIT" : "READY");
@@ -269,16 +264,6 @@ function renderToday(v) {
 }
 // 20-cell ASCII bar, filled to the score (terminal skin).
 const asciiBar = s => "[" + "█".repeat(Math.round(s / 5)) + "░".repeat(20 - Math.round(s / 5)) + "]";
-// Gym Wall: readiness → the hardest colour circuit worth trying today (typical gym scale, easiest first).
-// [name, tape colour, text colour, grade written on the tape, min readiness]
-const CIRCUITS = [["Yellow", "#d9b93a", "#1c1c1c", "5a", 0], ["Green", "#3f8a52", "#fff", "5c", 35], ["Blue", "#3a65a0", "#fff", "6a+", 55],
-  ["Red", "#b0433a", "#fff", "6b+", 70], ["Black", "#151517", "#f1efe9", "7a", 85]];
-function circuits(score) {
-  const s = score ?? 0, k = CIRCUITS.filter(c => s >= c[4]).length - 1;
-  return `<div class="circuit">${CIRCUITS.map((c, i) => [c, i]).reverse().map(([c, i]) => `<div class="ct ${i > k ? "off" : i === k ? "on" : "ok"}" style="--tc:${c[1]};--tt:${c[2]}">
-    <span class="tape">${c[3]}</span><b>${c[0]}</b><em>${i > k ? "not today" : i === k ? "send this" : "warm-up ✓"}</em></div>`).join("")}</div>
-    <p class="cscore">Readiness ${score == null ? "–" : score}/100</p>`;
-}
 // Player One: XP from everything the watch saw, so unlogged days still level you up.
 // 1 XP per 100 steps, 5 per floor, 30 per km ridden. Level L needs 250·L·(L−1) XP total (gentle quadratic curve).
 const xpOfDay = (w = {}) => (w.steps || 0) / 100 + (w.floors || 0) * 5;
