@@ -274,6 +274,20 @@ a{color:var(--accent)}
 :root[data-skin="pro"] .chart path,:root[data-skin="pro"] .ring circle,:root[data-skin="pro"] .zones .bar{filter:none!important;box-shadow:none}
 :root[data-skin="pro"] .ring .num{text-shadow:none!important}
 :root[data-skin="pro"] #map .leaflet-tile-pane{filter:none}
+/* health report: banded benchmark scale (one hue, stronger = target band) + "you" marker */
+.bench{padding:12px 0;border-top:1px solid var(--line)}
+.bench:first-of-type{border-top:0}
+.bench .row b{font:600 13px var(--disp);letter-spacing:.06em;text-transform:uppercase}
+.bench .bv{font:700 20px var(--mono);color:var(--ink)}
+.bench .scale{position:relative;display:flex;gap:2px;height:26px;margin:8px 0 6px}
+.bench .scale>div{background:rgba(var(--acc-rgb),var(--o));display:flex;align-items:center;justify-content:center;overflow:hidden;border-radius:2px}
+.bench .scale span{font:600 9px var(--mono);letter-spacing:.04em;color:var(--ink);white-space:nowrap;opacity:.85}
+.bench .scale i{position:absolute;top:-5px;bottom:-5px;width:4px;margin-left:-2px;background:var(--ink);border-radius:2px;box-shadow:0 0 0 2px var(--card)}
+.bench p{margin:4px 0;font-size:13.5px;line-height:1.45}
+.bench .cites{font-size:11px}
+a.src{color:var(--muted);text-decoration:underline dotted}
+ul.stats{padding-left:18px;font-size:13.5px;line-height:1.5}
+select{width:100%;font:14px var(--mono);padding:10px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink)}
 /* commute card + settings */
 :root[data-skin="game"] .legs span{font-size:8px;line-height:1.6}
 .cdays{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin:10px 0}
@@ -386,6 +400,12 @@ main .card:nth-child(2){animation-delay:.06s} main .card:nth-child(3){animation-
       <h2>Data</h2>
       <p class="muted" id="dataInfo"></p>
       <button id="clearBtn">Clear stored data</button>
+    </div>
+    <div class="card">
+      <h2>Profile</h2>
+      <p class="muted">Only used to compare you with age/sex norms. Stays on this phone.</p>
+      <div class="tiles" style="grid-template-columns:1fr 1fr"><div><label for="pAge">Age</label><input id="pAge" type="number" min="12" max="99" inputmode="numeric"></div>
+        <div><label for="pSex">Sex</label><select id="pSex"><option value="">–</option><option value="m">Male</option><option value="f">Female</option></select></div></div>
     </div>
     <div class="card">
       <h2>Commute</h2>

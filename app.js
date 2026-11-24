@@ -475,7 +475,7 @@ function renderFitness(v) {
   const W = db.wellness.filter(w => w.ctl != null).slice(-fitRange);
   const last = W[W.length - 1], wk = W[W.length - 8];
   const ramp = last && wk ? last.ctl - wk.ctl : null;
-  v.innerHTML = `<div class="row" style="margin-bottom:10px"><span class="muted">Range</span><div class="seg">${[42, 90, 365].map(r => `<button data-range="${r}" class="${r === fitRange ? "on" : ""}">${r === 365 ? "1 year" : r + " days"}</button>`).join("")}</div></div>
+  v.innerHTML = healthReport() + `<div class="row" style="margin-bottom:10px"><span class="muted">Range</span><div class="seg">${[42, 90, 365].map(r => `<button data-range="${r}" class="${r === fitRange ? "on" : ""}">${r === 365 ? "1 year" : r + " days"}</button>`).join("")}</div></div>
     ${ramp != null && ramp > 8 ? `<div class="warnbar"><b>Fitness rose ${ramp.toFixed(1)} in a week.</b> Above ~8/week is the usual path to overtraining or getting sick. Add an easy day.</div>` : ""}
     <div class="card"><h2>Fitness &amp; fatigue</h2><div id="ffC"></div>
       <p class="muted" style="font-size:13px">Fitness = 6-week average training load. Fatigue = last week's. Built from heart rate, since the Venu 2 has no power meter support.</p></div>
@@ -490,6 +490,141 @@ function renderFitness(v) {
   const V = db.wellness.slice(-fitRange);
   lineChart($("#voC"), { x: V.map(w => w.d), series: [{ name: "VO2max", color: css("--s1"), values: V.map(w => w.vo2 || null) }], height: 120 });
 }
+
+/* ---------- Health report: your numbers vs published research ---------- */
+// Profile is only used for age/sex norms. Stored on the phone like everything else.
+let profile = LS.get("gh.profile", { age: null, sex: "" });
+const prof = () => db && db.demo && !profile.age ? { age: 32, sex: "m" } : profile;   // demo gets a sample profile
+// Cooper Institute VO2max norms as printed in Garmin's manuals: cutoffs for 40th/60th/80th/95th percentile,
+// per 10-year age group starting at 20–29. Below the first cutoff = Poor.
+const VO2_NORMS = {
+  m: [[41.7, 45.4, 51.1, 55.4], [40.5, 44, 48.3, 54], [38.5, 42.4, 46.4, 52.5], [35.6, 39.2, 43.4, 48.9], [32.3, 35.5, 39.5, 45.7], [29.4, 32.3, 36.7, 42.1]],
+  f: [[36.1, 39.5, 43.9, 49.6], [34.4, 37.8, 42.4, 47.4], [33, 36.3, 39.7, 45.3], [30.1, 33, 36.7, 41.1], [27.5, 30, 33, 37.8], [25.9, 28.1, 30.9, 36.7]],
+};
+const SRC = {
+  cooper: ["Cooper Institute norms (Garmin manual)", "https://www8.garmin.com/manuals/webhelp/venu/EN-US/GUID-1FBCCD9E-19E1-4E4C-BD60-1793B5B97EB3.html"],
+  kodama: ["Kodama 2009, JAMA (33 studies)", "https://doi.org/10.1001/jama.2009.681"],
+  zhang: ["Zhang 2016, CMAJ (46 studies, 1.2M people)", "https://www.cmaj.ca/content/188/3/E53"],
+  paluch: ["Paluch 2022, Lancet Public Health (15 cohorts)", "https://pubmed.ncbi.nlm.nih.gov/35247352/"],
+  watson: ["Watson 2015, AASM/SRS consensus", "https://doi.org/10.5664/jcsm.4758"],
+  windred: ["Windred 2024, Sleep (UK Biobank, 61k)", "https://pmc.ncbi.nlm.nih.gov/articles/PMC10782501"],
+  who: ["WHO 2020 activity guidelines", "https://www.who.int/publications/i/item/9789240015128"],
+  celis: ["Celis-Morales 2017, BMJ (UK Biobank, 263k)", "https://pubmed.ncbi.nlm.nih.gov/28424154/"],
+};
+const cite = k => `<a class="src" href="${SRC[k][1]}" target="_blank" rel="noopener">${SRC[k][0]}</a>`;
+// One benchmark row: banded scale (one hue, darker = better band), "you" marker, verdict text, sources.
+// bands = [[upTo, label], ...] ascending; the last band runs to max.
+function bench(title, val, shown, min, max, bands, verdict, srcs) {
+  const pos = v => Math.max(0, Math.min(100, (v - min) / (max - min) * 100));
+  let lo = min;
+  const seg = bands.map(([to, lab, strong], i) => { const w = pos(Math.min(to, max)) - pos(lo); lo = to;
+    return `<div style="width:${w}%;--o:${strong ? .55 : .14 + i * .06}"><span>${lab}</span></div>`; }).join("");
+  return `<div class="bench"><div class="row"><b>${title}</b><span class="bv">${shown}</span></div>
+    <div class="scale">${seg}${val == null ? "" : `<i style="left:${pos(val)}%" title="you"></i>`}</div>
+    <p>${verdict}</p><p class="cites">${srcs.map(cite).join(" · ")}</p></div>`;
+}
+// ---- small stats toolkit ----
+const tcrit = df => 1.96 + 2.4 / Math.max(1, df);   // ≈ two-sided 95% Student t (within ~2% for df ≥ 3)
+// Least-squares slope per day with its 95% CI. pts = [[x, y]...]
+function linreg(pts) {
+  const n = pts.length; if (n < 10) return null;
+  const mx = mean(pts.map(p => p[0])), my = mean(pts.map(p => p[1]));
+  const sxx = pts.reduce((s, [x]) => s + (x - mx) ** 2, 0), b = pts.reduce((s, [x, y]) => s + (x - mx) * (y - my), 0) / sxx;
+  const res = pts.reduce((s, [x, y]) => s + (y - (my + b * (x - mx))) ** 2, 0);
+  const se = Math.sqrt(res / (n - 2) / sxx); return { b, ci: tcrit(n - 2) * se, n };
+}
+// Pearson r with a significance flag (t-test on r).
+function pearson(pts) {
+  const n = pts.length; if (n < 10) return null;
+  const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]), mx = mean(xs), my = mean(ys);
+  const r = pts.reduce((s, [x, y]) => s + (x - mx) * (y - my), 0) / Math.sqrt(xs.reduce((s, x) => s + (x - mx) ** 2, 0) * ys.reduce((s, y) => s + (y - my) ** 2, 0));
+  const t = r * Math.sqrt((n - 2) / Math.max(1e-9, 1 - r * r)); return { r, n, sig: Math.abs(t) > tcrit(n - 2) };
+}
+const rWord = r => { const a = Math.abs(r); return a < .1 ? "no" : a < .3 ? "a weak" : a < .5 ? "a moderate" : "a strong"; };
+
+function healthReport() {
+  const W = db.wellness, P = prof(), last = n => W.slice(-n);
+  const vals = (arr, f) => arr.map(f).filter(x => x != null && x > 0);
+  let h = `<div class="card"><h2>Health report · vs research</h2>`;
+  if (!P.age || !P.sex) h += `<div class="warnbar">Add your <b>age and sex</b> in Settings → Profile. VO2max and step targets depend on both.</div>`;
+  // VO2max
+  const vo = [...W].reverse().find(w => w.vo2);
+  if (vo) {
+    const v = vo.vo2, g = P.age ? Math.max(0, Math.min(5, Math.floor((P.age - 20) / 10))) : null, N = g != null && VO2_NORMS[P.sex] ? VO2_NORMS[P.sex][g] : null;
+    if (N) {
+      const labs = ["Poor", "Fair", "Good", "Excellent", "Superior"], k = N.filter(c => v >= c).length, nextC = N[k];
+      h += bench("VO2max", v, v.toFixed(0), N[0] - 8, N[3] + 6, [[N[0], "Poor"], [N[1], "Fair"], [N[2], "Good"], [N[3], "Excel."], [99, "Super.", 1]],
+        `<b>${labs[k]}</b> for your age and sex${nextC ? `, ${(nextC - v).toFixed(1)} below ${labs[k + 1]}` : ""}. Each +3.5 (one MET) is tied to about <b>13% lower risk of death</b> from any cause. The Venu 2 estimates this from walks/runs with HR, so trust the trend more than the number.`, ["cooper", "kodama"]);
+    } else h += bench("VO2max", null, v.toFixed(0), 25, 60, [[35, ""], [45, ""], [99, ""]], "Add age and sex to place this against population norms. Each +3.5 (one MET) ≈ 13% lower all-cause mortality.", ["kodama"]);
+  }
+  // Resting HR (30-day mean)
+  const rh = vals(last(30), w => w.rhr);
+  if (rh.length >= 5) {
+    const m = mean(rh);
+    h += bench("Resting HR", m, `${m.toFixed(0)} bpm`, 35, 95, [[50, "Athletic", 1], [60, "Low"], [80, "Mid"], [99, "High"]],
+      m < 60 ? `In the lowest-risk band. In the meta-analysis, 60–80 bpm carried <b>+12%</b> and over 80 bpm <b>+45%</b> mortality risk vs the lowest group.`
+        : `Every 10 bpm higher was tied to <b>+9%</b> all-cause mortality. Getting under 60 is realistic with 2–3 cardio sessions a week (your commute counts).`, ["zhang"]);
+  }
+  // Steps (30-day mean); plateau depends on age
+  const st = vals(last(30), w => w.steps);
+  if (st.length >= 5) {
+    const m = mean(st), old = (P.age || 0) >= 60, a = old ? 6000 : 8000, b = old ? 8000 : 10000;
+    h += bench("Steps / day", m, r0(m).toLocaleString(), 0, 14000, [[4000, "Low"], [a, "Gaining"], [b, "Plateau", 1], [99, "Beyond"]],
+      m >= a ? `In the range where the mortality benefit levels off (${(a / 1000)}–${b / 1000}k for your age). More steps still help fitness, not much more longevity.`
+        : `Risk kept dropping up to <b>${a / 1000}–${b / 1000}k</b> steps for your age. ${r0(a - m).toLocaleString()} more a day gets you there.`, ["paluch"]);
+  }
+  // Sleep duration + regularity (30 nights)
+  const sl = vals(last(30), w => w.sleep).map(x => x / 3600);
+  if (sl.length >= 7) {
+    const m = mean(sl), v = sd(sl) * 60;
+    h += bench("Sleep", m, hm(m * 3600), 4, 10, [[6, "Short"], [7, "Below"], [9, "7–9h", 1], [99, "Long"]],
+      m >= 7 ? `Meets the 7h+ adult recommendation.` : `Under the 7h+ that sleep societies recommend for adults. Short sleep also shows up as higher next-morning resting HR (see below).`, ["watson"]);
+    h += bench("Sleep regularity", 150 - v, `±${r0(v)} min`, 0, 150, [[60, "Irregular"], [90, "Variable"], [120, "Regular"], [999, "Steady", 1]],
+      `Your nightly sleep length swings by ±${r0(v)} min (1 SD). A UK Biobank study found <b>regular</b> sleep predicted mortality better than <b>long</b> sleep. (The study used a stricter index; this is the app's approximation.)`, ["windred"]);
+  }
+  // Activity minutes per week from logged rides (last 4 weeks)
+  const rides = db.acts.filter(isRide), since = iso(new Date(Date.now() - 28 * 864e5));
+  const min = rides.filter(a => a.date.slice(0, 10) >= since).reduce((s, a) => s + (a.time || 0), 0) / 60 / 4;
+  h += bench("Cardio min / week", Math.min(min, 449), `${r0(min)} min`, 0, 450, [[75, "Low"], [150, "Some"], [300, "WHO target", 1], [999, "Extra"]],
+    `WHO: 150–300 min moderate a week plus strength twice. Only <b>logged</b> rides count here. Your plan (3 commute days × 2 legs) is ${commute.days.length * 2} rides a week; cycle-commuters had <b>41% lower</b> all-cause mortality than car/transit commuters.`, ["who", "celis"]);
+  return h + `<p class="muted note">Associations from observational studies, not guarantees, and not medical advice.</p></div>` + statsCard();
+}
+
+// Statistics on your own data: 90-day trends with 95% CIs, correlations, commute vs other days.
+function statsCard() {
+  const W = db.wellness.slice(-90), t0 = W.length ? parseDay(W[0].d).getTime() : 0, x = w => (parseDay(w.d).getTime() - t0) / 864e5;
+  const trend = (lab, f, unit, dec, downGood) => {
+    const L = linreg(W.filter(w => f(w) != null && f(w) > 0).map(w => [x(w), f(w)]));
+    if (!L) return `<tr><td>${lab}</td><td colspan="2" class="muted">not enough data</td></tr>`;
+    const m = L.b * 30, ci = L.ci * 30, sig = Math.abs(m) > ci, good = (m < 0) === downGood;
+    return `<tr><td>${lab}</td><td>${m >= 0 ? "+" : "−"}${Math.abs(m).toFixed(dec)} ${unit}/mo <span class="muted">±${ci.toFixed(dec)}</span></td>
+      <td class="${sig ? (good ? "up-good" : "up-bad") : "muted"}">${sig ? (good ? "▲ improving" : "▼ worsening") : "no clear change"}</td></tr>`;
+  };
+  // Pairs: same-night sleep → that morning's RHR; yesterday's steps → tonight's sleep.
+  const byD = Object.fromEntries(db.wellness.map(w => [w.d, w]));
+  const prev = d => { const p = parseDay(d); p.setDate(p.getDate() - 1); return byD[iso(p)]; };
+  const pr1 = pearson(W.filter(w => w.sleep && w.rhr).map(w => [w.sleep / 3600, w.rhr]));
+  const pr2 = pearson(W.filter(w => w.sleep && prev(w.d)?.steps).map(w => [prev(w.d).steps, w.sleep / 3600]));
+  const corr = (r, txt) => r ? `<li>${txt(r)} <span class="muted">(r = ${r.r.toFixed(2)}, ${r.n} days${r.sig ? ", significant" : ", could be chance"})</span></li>` : "";
+  // Commute vs non-commute days (weekday-matched by the user's own commute setting)
+  const isC = w => commute.days.includes(parseDay(w.d).getDay());
+  const cmp = (f, fmt) => { const a = W.filter(isC).map(f).filter(v => v > 0), b = W.filter(w => !isC(w)).map(f).filter(v => v > 0);
+    return a.length >= 4 && b.length >= 4 ? [fmt(mean(a)), fmt(mean(b))] : ["–", "–"]; };
+  const cS = cmp(w => w.steps, v => r0(v).toLocaleString()), cR = cmp(w => w.rhr, v => v.toFixed(1)), cL = cmp(w => w.sleep, v => hm(v));
+  return `<div class="card"><h2>Your statistics · 90 days</h2>
+    <table><tr><th>Trend</th><th>Change</th><th></th></tr>
+      ${trend("Resting HR", w => w.rhr, "bpm", 1, true)}${trend("VO2max", w => w.vo2, "", 2, false)}
+      ${trend("Steps", w => w.steps, "", 0, false)}${trend("Sleep", w => w.sleep && w.sleep / 60, "min", 0, false)}</table>
+    <p class="muted note">Straight-line fit; ± is the 95% confidence interval. "No clear change" = the interval includes zero.</p>
+    <ul class="stats">${corr(pr1, r => `More sleep → ${r.r < 0 ? "lower" : "higher"} resting HR next morning: ${rWord(r.r)} link.`)}
+      ${corr(pr2, r => `More steps → ${r.r > 0 ? "longer" : "shorter"} sleep that night: ${rWord(r.r)} link.`)}</ul>
+    <table><tr><th></th><th>Commute days</th><th>Other days</th></tr>
+      <tr><td>Steps</td><td>${cS[0]}</td><td>${cS[1]}</td></tr><tr><td>Resting HR</td><td>${cR[0]}</td><td>${cR[1]}</td></tr>
+      <tr><td>Sleep</td><td>${cL[0]}</td><td>${cL[1]}</td></tr></table>
+    <p class="muted note">Not measured by the Venu 2, so not analysed: HRV, training load from unlogged gym/runs.</p></div>`;
+}
+function fillProfile() { $("#pAge").value = profile.age || ""; $("#pSex").value = profile.sex || ""; }
+function saveProfile() { profile = { age: +$("#pAge").value || null, sex: $("#pSex").value }; LS.set("gh.profile", profile); }
 
 /* ---------- Sleep ---------- */
 function renderSleep(v) {
@@ -612,7 +747,7 @@ function bootScreen() {
 function openSettings() {
   $("#key").value = cfg.key; $("#ath").value = cfg.athlete;
   $("#dataInfo").textContent = db ? `${db.demo ? "Demo data" : "Synced"}: ${db.wellness.length} days, ${db.acts.length} activities. Last sync ${new Date(db.at).toLocaleString()}.` : "Nothing stored.";
-  fillCommuteSettings();
+  fillCommuteSettings(); fillProfile();
   $("#settings").classList.add("open");
 }
 function useDemo() { db = demoData(); LS.set("gh.db", db); $("#settings").classList.remove("open"); render(); }
@@ -634,6 +769,7 @@ document.addEventListener("click", e => {
   } else if (t.id === "clearBtn") { LS.del("gh.db"); db = null; openSettings(); render(); }
 });
 document.addEventListener("change", e => { if (e.target.id === "cAm" || e.target.id === "cPm") { saveCommute(); render(); } });
+document.addEventListener("change", e => { if (e.target.id === "pAge" || e.target.id === "pSex") { saveProfile(); render(); } });
 // Charts are sized from their container width, so redraw on rotation/resize (debounced).
 let rz; addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(render, 200); });
 // ?demo loads demo data and #rides/#fitness/#sleep picks a tab: handy links for testing and showing the app.
