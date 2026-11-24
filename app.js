@@ -56,9 +56,9 @@ const pace = ms => { if (!ms) return "–"; const sec = 1000 / ms; return `${Mat
 const kmh = ms => ms == null ? "–" : (ms * 3.6).toFixed(1);
 const hm = s => { if (s == null) return "–"; const h = Math.floor(s / 3600), m = Math.round(s % 3600 / 60); return h ? `${h}h ${String(m).padStart(2, "0")}m` : `${m}m`; };
 const r0 = v => v == null || isNaN(v) ? "–" : Math.round(v);
-const isRide = a => /Ride/i.test(a.type || "");
+const isRide = a => /Ride|Cycl|Bike/i.test(a.type || "");   // Intervals says "Ride", Garmin says "cycling"
 // Workout families. Intervals passes Garmin's sport type through (Ride, VirtualRide, Run, TrailRun, WeightTraining, Walk, Hike, RockClimbing…).
-const KINDS = [["ride", "Ride", /Ride|Cycl|Bike/i], ["run", "Run", /Run/i], ["gym", "Strength", /Weight|Strength|Crossfit|HIIT|Workout|Training|Yoga|Pilates/i],
+const KINDS = [["ride", "Ride", /Ride|Cycl|Bike/i], ["run", "Run", /Run/i], ["gym", "Strength", /Weight|Strength|Crossfit|HIIT|Workout|Training|Yoga|Pilates|equipment|cardio|elliptical|stair/i],
   ["climb", "Climb", /Climb|Boulder/i], ["walk", "Walk", /Walk|Hike/i], ["swim", "Swim", /Swim/i]];
 const kindOf = a => (KINDS.find(k => k[2].test(a.type || "")) || ["other", "Other"])[0];
 const kindName = k => (KINDS.find(x => x[0] === k) || [k, "Other"])[1];
@@ -86,11 +86,21 @@ const slimA = a => ({
 // repo, filled by garmin-hub-data/pull.py on their PC. Read with a fine-grained, read-only GitHub token kept on the phone.
 const GH_DATA = "https://api.github.com/repos/Iartyom/garmin-hub-data/contents/data/daily.json";
 let ghTok = LS.get("gh.ghtok", "");
-async function fetchGarmin() {
-  if (!ghTok) return null;
-  const r = await fetch(GH_DATA, { headers: { Authorization: `Bearer ${ghTok}`, Accept: "application/vnd.github.raw+json" }, cache: "no-store" });
+async function ghFile(url) {
+  const r = await fetch(url, { headers: { Authorization: `Bearer ${ghTok}`, Accept: "application/vnd.github.raw+json" }, cache: "no-store" });
   if (!r.ok) throw new Error(`Garmin extras: GitHub ${r.status}${r.status === 401 || r.status === 404 ? " (check the token)" : ""}`);
   return r.json();
+}
+async function fetchGarmin() { return ghTok ? ghFile(GH_DATA) : null; }
+// Garmin's own activity list (acts.json). Missing file (older puller) just means no extra history.
+async function fetchGarminActs() { return ghTok ? ghFile(GH_DATA.replace("daily.json", "acts.json")).catch(() => null) : null; }
+// Union of Intervals activities (have streams/maps) and Garmin-only history. Same activity = same type family
+// starting within 3 min; then the Intervals copy wins. Garmin-only rows get id "g<id>" and src "garmin".
+function mergeActs(iv, ga) {
+  if (!ga) return iv;
+  const t = a => Date.parse(a.date), extra = ga.filter(g => !iv.some(a => Math.abs(t(a) - t(g)) < 18e4 && kindOf(a) === kindOf(g)))
+    .map(g => ({ ...g, id: "g" + g.gid, src: "garmin", spd: g.spd, load: null }));
+  return [...iv, ...extra].sort((x, y) => y.date.localeCompare(x.date));
 }
 // Garmin row for a date (or undefined). Index rebuilt lazily when db changes.
 let gIdx = null, gIdxOf = null;
@@ -102,12 +112,12 @@ async function sync() {
   const q = `oldest=${iso(addDays(now, -365))}&newest=${iso(now)}`;
   try {
     let gErr = null;
-    const [w, a, me, gx] = await Promise.all([api(`/athlete/${ath}/wellness?${q}`), api(`/athlete/${ath}/activities?${q}`), api(`/athlete/${ath}`).catch(() => null),
-      fetchGarmin().catch(e => { gErr = e.message; return db && db.garmin || null; })]);   // extras failing must not block the main sync
+    const [w, a, me, gx, ga] = await Promise.all([api(`/athlete/${ath}/wellness?${q}`), api(`/athlete/${ath}/activities?${q}`), api(`/athlete/${ath}`).catch(() => null),
+      fetchGarmin().catch(e => { gErr = e.message; return db && db.garmin || null; }), fetchGarminActs()]);   // extras failing must not block the main sync
     if (me && me.sex && !profile.sex) { profile.sex = /^f/i.test(me.sex) ? "f" : "m"; LS.set("gh.profile", profile); }
     db = {
       wellness: w.map(slimW).sort((x, y) => x.d.localeCompare(y.d)),
-      acts: a.map(slimA).sort((x, y) => y.date.localeCompare(x.date)),
+      acts: mergeActs(a.map(slimA), ga ? ga.filter(g => g.date >= iso(addDays(now, -365))) : null),
       garmin: gx, at: Date.now(),
     };
     LS.set("gh.db", db);
@@ -630,6 +640,7 @@ async function openRide(id) {
     $("#zC").innerHTML = a.zones.map((t, i) => `<div class="z"><span>Z${i + 1}</span><div class="bar" style="width:${(t / mx * 100).toFixed(1)}%;opacity:${(0.45 + 0.55 * (i + 1) / a.zones.length).toFixed(2)}"></div><span>${hm(t)}<br><small class="muted">${r0(t / tot * 100)}%</small></span></div>`).join("");
   } else $("#zC").innerHTML = `<p class="muted">No zone data.</p>`;
   let s;
+  if (a.src === "garmin") { $("#hrC").innerHTML = `<p class="muted">Imported from Garmin history: summary only. Activities recorded after you linked Intervals.icu get full charts and maps.</p>`; if ($("#driftTile")) $("#driftTile").remove(); if ($("#spC")) $("#spC").closest(".card").remove(); if ($("#map")) $("#map").remove(); return; }
   try { s = await streams(a); } catch (e) { $("#hrC").innerHTML = `<p class="muted">${esc(e.message)}</p>`; return; }
   const dr = a.drift != null ? a.drift : driftOf(s);
   if ($("#driftTile")) $("#driftTile").innerHTML = `<span>HR drift</span><b>${dr == null ? "–" : dr.toFixed(1) + "%"}</b><small>${dr == null ? "" : dr < 5 ? "steady" : dr < 10 ? "some fade" : "big fade"}</small>`;
