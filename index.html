@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <!-- Fonts are decoration only: offline the app falls back to system fonts. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;800&family=JetBrains+Mono:wght@500;700&family=Audiowide&family=VT323&family=Inter:wght@400;600;800&family=Bebas+Neue&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;800&family=JetBrains+Mono:wght@500;700&family=Audiowide&family=Press+Start+2P&family=Barlow+Condensed:wght@500;600;700&family=VT323&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
 <style>
 /* Cyber theme: one dark look on purpose (it's the app's identity). Series: cyan = slot 1, magenta = slot 2,
    picked far apart in hue AND lightness so fitness vs fatigue still separate for colour-blind eyes. */
@@ -144,8 +144,114 @@ a{color:var(--accent)}
 :root[data-skin="term"] header h1{font-size:30px;letter-spacing:.04em}
 :root[data-skin="term"] .tile b{font-size:28px;font-weight:400}
 :root[data-skin="term"] .card h2{font-size:17px;font-weight:400;letter-spacing:.1em}
-:root[data-skin="term"] .card h2::before{content:"> "}
+:root[data-skin="term"] .card h2::before{content:"$ ";color:var(--ink)}
+:root[data-skin="term"] .card h2{text-transform:none;color:var(--ink2)}
 :root[data-skin="term"] .ring .num{font-weight:400;font-size:40px}
+/* whole screen glows a little, like phosphor bleeding */
+:root[data-skin="term"] body{text-shadow:0 0 3px rgba(57,255,20,.35)}
+:root[data-skin="term"] header h1{text-transform:none}
+:root[data-skin="term"] header h1 small{font-family:"JetBrains Mono",monospace;font-size:11px;letter-spacing:0;color:var(--ink2)}
+/* CRT tube: dark vignette at the edges */
+:root[data-skin="term"] body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:19;
+  background:radial-gradient(ellipse 90% 80% at 50% 45%,transparent 60%,rgba(0,0,0,.55) 100%)}
+/* ASCII readiness bar */
+.ascii{font:400 26px/1.1 VT323,"JetBrains Mono",monospace;margin:0 0 6px;white-space:pre;overflow:hidden;color:var(--lvl,var(--ink))}
+.ascii small{display:block;font-size:15px;color:var(--muted)}
+.verdict.stack{display:block}
+/* function-key style tab labels */
+:root[data-skin="term"] nav{counter-reset:fk;background:#020802}
+:root[data-skin="term"] nav button svg{display:none}
+:root[data-skin="term"] nav button{font:400 18px VT323,monospace;padding:14px 0 16px}
+:root[data-skin="term"] nav button::before{counter-increment:fk;content:"[" counter(fk) "]";color:var(--muted);margin-right:3px}
+:root[data-skin="term"] nav button.on{background:var(--ink);color:#020802;text-shadow:none}
+:root[data-skin="term"] nav button.on::before{color:#020802}
+:root[data-skin="term"] .chart .grid{stroke-dasharray:2 4}
+:root[data-skin="term"] .plan{border-style:solid;border-color:var(--line);font-family:"JetBrains Mono",monospace;font-size:13px}
+:root[data-skin="term"] .plan span::before{content:"# "}
+/* boot screen shown once per app launch */
+#boot{position:fixed;inset:0;z-index:30;background:#020802;color:#39ff14;font:400 20px/1.35 VT323,monospace;padding:calc(40px + env(safe-area-inset-top)) 22px;
+  text-shadow:0 0 6px rgba(57,255,20,.7);animation:bootOut .35s ease 1.9s forwards;pointer-events:none}
+#boot div{opacity:0;animation:bootLine 0s linear forwards}
+#boot .ok{color:#c6ffc0}
+@keyframes bootLine{to{opacity:1}}
+@keyframes bootOut{to{opacity:0;visibility:hidden}}
+
+/* ON BELAY: guidebook / outdoor-brand look. Granite grain + faint topo contours, chalk-white text,
+   one rope-orange accent, condensed type. Readiness is a route topo (bolts ×, anchor rings, climber dot). */
+:root[data-skin="belay"]{
+  --acc-rgb:240,164,58; --bg:#15171a; --card:#1b1e22; --card2:#1e2126; --line:#2e3238; --ink:#ecebe6; --ink2:#b3b0a8; --muted:#7f7c75;
+  --s1:#f0a43a; --s2:#7fb4c4; --good:#9cc97f; --warn:#e9c14d; --bad:#e2694f; --accent:#f0a43a; --glow:none;
+  --disp:"Barlow Condensed","Arial Narrow",sans-serif; --mono:"Barlow Condensed","Arial Narrow",sans-serif;
+}
+:root[data-skin="belay"] body{font-family:Inter,system-ui,sans-serif;background:
+  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .06 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='720' height='720'%3E%3Cg fill='none' stroke='%23ecebe6' stroke-opacity='.045' stroke-width='1.2'%3E%3Cpath d='M360 120c120 10 230 90 240 220s-80 250-230 260-260-70-270-210 140-280 260-270z'/%3E%3Cpath d='M362 170c95 8 185 75 190 175s-65 200-185 208-205-55-212-168 112-223 207-215z'/%3E%3Cpath d='M365 222c70 6 135 55 140 128s-48 148-136 154-150-40-155-123 82-165 151-159z'/%3E%3Cpath d='M368 275c45 4 88 36 90 83s-31 95-88 99-97-26-100-80 53-106 98-102z'/%3E%3Cpath d='M370 322c22 2 42 18 44 41s-15 46-43 48-47-13-49-39 26-52 48-50z'/%3E%3Cpath d='M40 40c90 30 120 120 60 190S-40 300 -60 230'/%3E%3Cpath d='M690 520c-60 40-80 120-20 170'/%3E%3C/g%3E%3C/svg%3E") 0 0/720px 720px,
+  var(--bg);background-attachment:fixed}
+:root[data-skin="belay"] .card{border-radius:6px;background:linear-gradient(180deg,rgba(255,255,255,.025),transparent 40%),var(--card);box-shadow:0 1px 0 rgba(255,255,255,.04) inset,0 8px 24px rgba(0,0,0,.35)}
+:root[data-skin="belay"] .card::before,:root[data-skin="belay"] .card::after{display:none}
+/* section titles: small bolt-hanger icon + condensed caps, like guidebook headers */
+:root[data-skin="belay"] .card h2{font:600 15px/1 "Barlow Condensed",sans-serif;letter-spacing:.14em;color:var(--ink2);display:flex;align-items:center;gap:8px}
+:root[data-skin="belay"] .card h2::before{content:"";width:11px;height:15px;flex:none;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 11 15'%3E%3Crect x='1' y='1' width='9' height='13' rx='4.5' fill='none' stroke='%23b3b0a8' stroke-width='1.4'/%3E%3Ccircle cx='5.5' cy='5' r='1.6' fill='%23b3b0a8'/%3E%3Cellipse cx='5.5' cy='10.2' rx='2.3' ry='1.9' fill='none' stroke='%23b3b0a8' stroke-width='1.2'/%3E%3C/svg%3E") no-repeat center/contain}
+:root[data-skin="belay"] header h1{font:700 30px/1 "Barlow Condensed",sans-serif;letter-spacing:.06em}
+:root[data-skin="belay"] header h1 small{font:600 11px Inter,sans-serif;letter-spacing:.32em;color:var(--accent)}
+:root[data-skin="belay"] .tile{background:rgba(255,255,255,.025);border:0;border-top:2px solid var(--line);border-radius:3px}
+:root[data-skin="belay"] .tile span{font:600 11px "Barlow Condensed",sans-serif;letter-spacing:.12em}
+:root[data-skin="belay"] .tile b{font:600 27px/1.1 "Barlow Condensed",sans-serif;letter-spacing:.01em}
+:root[data-skin="belay"] .tile small{font-family:Inter,sans-serif}
+:root[data-skin="belay"] .verdict h3{font:700 28px/1 "Barlow Condensed",sans-serif;letter-spacing:.04em}
+:root[data-skin="belay"] .plan{border:0;border-left:2px solid var(--accent);border-radius:0;background:rgba(240,164,58,.05)}
+:root[data-skin="belay"] .plan span:first-child{font:600 12px "Barlow Condensed",sans-serif;letter-spacing:.18em}
+:root[data-skin="belay"] nav{background:rgba(21,23,26,.95)}
+:root[data-skin="belay"] nav button{font:600 11px "Barlow Condensed",sans-serif;letter-spacing:.14em}
+/* the topo widget */
+.topo{flex:none;display:flex;align-items:flex-start;gap:4px}
+.topo .route{fill:none;stroke:var(--ink2);stroke-width:1.6;stroke-dasharray:3 3}
+.topo .bolt path{stroke:var(--muted);stroke-width:1.8;stroke-linecap:round;transition:stroke .2s}
+.topo .bolt.clipped path{stroke:var(--accent)}
+.topo .anchor circle{fill:none;stroke:var(--ink);stroke-width:1.6}
+.topo .climber{stroke:var(--card);stroke-width:2.5}
+.topo .grade{padding-top:2px}
+.topo .grade b{display:block;font:700 34px/1 "Barlow Condensed",sans-serif;color:var(--ink)}
+.topo .grade small{font:500 11px Inter,sans-serif;color:var(--muted)}
+
+/* PLAYER ONE: 16-bit RPG. Navy night, gold UI, pixel boxes, HP/XP bars */
+:root[data-skin="game"]{
+  --acc-rgb:255,211,77; --bg:#0b0d26; --card:#141846; --card2:#171c52; --line:#2c347a; --ink:#f5f3ff; --ink2:#b9b8e6; --muted:#7a7bb3;
+  --s1:#4dc3ff; --s2:#ffd34d; --good:#5cff7a; --warn:#ffd34d; --bad:#ff4d6d; --accent:#ffd34d; --glow:none;
+  --disp:"Press Start 2P",monospace; --mono:"JetBrains Mono",monospace;
+}
+:root[data-skin="game"] body{background:radial-gradient(120% 60% at 50% -10%,rgba(77,195,255,.18),transparent 60%),var(--bg);background-attachment:fixed}
+/* pixel box: square corners cut by four offset shadows, no radius */
+:root[data-skin="game"] .card{border:0;border-radius:0;margin:16px 4px;background:var(--card);
+  box-shadow:0 -4px 0 0 var(--line),0 4px 0 0 var(--line),-4px 0 0 0 var(--line),4px 0 0 0 var(--line),inset 0 4px 0 rgba(255,255,255,.06)}
+:root[data-skin="game"] .card::before,:root[data-skin="game"] .card::after{display:none}
+:root[data-skin="game"] .card h2{font-size:10px;letter-spacing:.05em;color:var(--accent);line-height:1.6}
+:root[data-skin="game"] .card h2::before{content:"▶ ";color:var(--ink)}
+:root[data-skin="game"] header h1{font-size:16px;letter-spacing:0;line-height:1.4;text-shadow:3px 3px 0 #000}
+:root[data-skin="game"] header h1 small{font-size:8px;letter-spacing:.1em;color:var(--s1)}
+:root[data-skin="game"] .tile{border-radius:0;border:0;background:#0f1340;box-shadow:inset 0 0 0 2px var(--line)}
+:root[data-skin="game"] .tile span{font:400 7px/1.6 "Press Start 2P",monospace;letter-spacing:0;color:var(--s1)}
+:root[data-skin="game"] .tile b{font:400 14px/1.2 "Press Start 2P",monospace;margin:6px 0 4px}
+:root[data-skin="game"] header h1 small{font-family:"Press Start 2P",monospace}
+:root[data-skin="game"] .tile small{font:400 7px/1.5 "Press Start 2P",monospace}
+:root[data-skin="game"] .verdict h3{font-size:12px;line-height:1.6;margin-top:10px}
+:root[data-skin="game"] nav button{font:400 7px "Press Start 2P",monospace;letter-spacing:0}
+:root[data-skin="game"] .plan{border:2px solid var(--line);border-radius:0;background:#0f1340}
+:root[data-skin="game"] .plan span{font:400 8px "Press Start 2P",monospace;color:var(--good)}
+:root[data-skin="game"] button{border-radius:0}
+:root[data-skin="game"] .ride{border-radius:0}
+/* HP / XP bars: segmented pixel fill */
+.bar8{position:relative;height:18px;background:#05061a;box-shadow:0 0 0 2px var(--line),0 0 0 4px #000}
+.bar8 i{position:absolute;inset:0 auto 0 0;background:var(--lvl,var(--good));
+  -webkit-mask:repeating-linear-gradient(90deg,#000 0 8px,transparent 8px 10px);mask:repeating-linear-gradient(90deg,#000 0 8px,transparent 8px 10px)}
+.barhead{display:flex;justify-content:space-between;align-items:baseline;font:400 10px "Press Start 2P",monospace;margin-bottom:10px}
+.barhead b{font-size:14px;color:var(--lvl,var(--ink))}
+.xpcard .bar8 i{background:var(--accent)}
+.xpcard .lv{font:400 26px "Press Start 2P",monospace;color:var(--accent);text-shadow:3px 3px 0 #000}
+.xpgain{display:inline-block;font:400 9px "Press Start 2P",monospace;color:var(--good);margin-left:8px}
+.lvup{position:fixed;left:50%;top:40%;translate:-50% -50%;z-index:30;font:400 22px "Press Start 2P",monospace;color:var(--accent);
+  text-shadow:4px 4px 0 #000,0 0 20px rgba(255,211,77,.8);white-space:nowrap;pointer-events:none;animation:lvup 2.2s steps(12) forwards}
+@keyframes lvup{0%{opacity:0;scale:.4}15%{opacity:1;scale:1.15}25%{scale:1}80%{opacity:1}100%{opacity:0;translate:-50% -90%}}
 
 /* PRO: clean light sports-app look; no glow, no grid, big readable numbers */
 :root[data-skin="pro"]{
@@ -168,55 +274,18 @@ a{color:var(--accent)}
 :root[data-skin="pro"] .chart path,:root[data-skin="pro"] .ring circle,:root[data-skin="pro"] .zones .bar{filter:none!important;box-shadow:none}
 :root[data-skin="pro"] .ring .num{text-shadow:none!important}
 :root[data-skin="pro"] #map .leaflet-tile-pane{filter:none}
-/* ON BELAY: rope-climbing gym. Grey wall with coloured holds, a rope down the left, cards clipped on carabiners */
-:root[data-skin="belay"]{
-  --acc-rgb:255,122,26; --bg:#1b1d21; --card:#24272c; --card2:#2a2d33; --line:#3a3e45; --ink:#f4f1ea; --ink2:#c2bdb2; --muted:#8a867e;
-  --s1:#ff7a1a; --s2:#2ec4b6; --good:#2ec4b6; --warn:#ffd23f; --bad:#ff4d6d; --accent:#ff7a1a; --glow:none;
-  --disp:"Bebas Neue",Impact,"Arial Narrow",sans-serif; --mono:Inter,system-ui,sans-serif;
-}
-/* wall: scattered holds (radial blobs on a 260px tile) over faint panel seams */
-:root[data-skin="belay"] body{font-family:Inter,system-ui,sans-serif;background:
-  radial-gradient(circle at 12% 18%,#ff7a1a 0 7px,transparent 8px),radial-gradient(circle at 70% 9%,#2ec4b6 0 5px,transparent 6px),
-  radial-gradient(ellipse 11px 7px at 44% 52%,#8e5cf7 0 100%,transparent),radial-gradient(circle at 88% 64%,#ffd23f 0 6px,transparent 7px),
-  radial-gradient(circle at 22% 83%,#ff4d6d 0 6px,transparent 7px),radial-gradient(ellipse 8px 12px at 61% 92%,#2ec4b6 0 100%,transparent),
-  linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px) 0 0/100% 130px,linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px) 0 0/130px 100%,
-  var(--bg);background-size:260px 260px,260px 260px,260px 260px,260px 260px,260px 260px,260px 260px,100% 130px,130px 100%,auto;background-attachment:fixed}
-/* dim the holds behind content so text stays readable */
-:root[data-skin="belay"] body::before{content:"";position:fixed;inset:0;background:rgba(27,29,33,.72);pointer-events:none;z-index:0}
-:root[data-skin="belay"] header,:root[data-skin="belay"] main,:root[data-skin="belay"] #status{position:relative;z-index:1}
-:root[data-skin="belay"] header h1{font-size:34px;letter-spacing:.04em;font-weight:400;text-transform:uppercase}
-:root[data-skin="belay"] header h1 small{font-family:Inter,sans-serif;letter-spacing:.3em;color:var(--accent)}
-:root[data-skin="belay"] .card h2{font-size:18px;font-weight:400;letter-spacing:.08em;color:var(--ink)}
-:root[data-skin="belay"] .card h2::before{content:"";display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--s2);margin-right:8px;vertical-align:2px}
-:root[data-skin="belay"] .tile span,:root[data-skin="belay"] nav button,:root[data-skin="belay"] label,:root[data-skin="belay"] .plan span{font-family:Inter,sans-serif;font-weight:700;letter-spacing:.06em;font-size:10px}
-:root[data-skin="belay"] .tile b{font-family:"Bebas Neue",Impact,sans-serif;font-weight:400;font-size:30px;letter-spacing:.02em}
-:root[data-skin="belay"] .verdict h3{font-size:26px;font-weight:400}
-:root[data-skin="belay"] .ring .num{font-weight:400;font-size:38px}
-:root[data-skin="belay"] .tile{background:rgba(255,255,255,.035);border:0;border-left:3px solid var(--s2)}
-:root[data-skin="belay"] .tiles .tile:nth-child(3n+2){border-left-color:var(--s1)} :root[data-skin="belay"] .tiles .tile:nth-child(3n){border-left-color:#8e5cf7}
-/* the rope: twisted orange/white kernmantle down the left of the content */
-:root[data-skin="belay"] main{padding-left:38px}
-:root[data-skin="belay"] main::before{content:"";position:absolute;left:17px;top:6px;bottom:0;width:7px;border-radius:4px;z-index:0;
-  background:repeating-linear-gradient(160deg,#ff7a1a 0 5px,#fff3e6 5px 7px,#e0601a 7px 12px);box-shadow:0 0 0 1px rgba(0,0,0,.35)}
-/* each card hangs from a carabiner (::before) on a quickdraw sling (::after) */
-:root[data-skin="belay"] .card{border-radius:10px;overflow:visible}
-:root[data-skin="belay"] .card::before{content:"";width:12px;height:22px;top:16px;left:-29px;border:3px solid #c9ced6;border-radius:7px;opacity:1;background:transparent;transform-origin:50% -6px}
-:root[data-skin="belay"] .card::after{content:"";width:16px;height:4px;bottom:auto;right:auto;top:26px;left:-17px;border:0;border-radius:2px;background:#2ec4b6;opacity:1}
-:root[data-skin="belay"] .plan{border-color:rgba(46,196,182,.5)}
-:root[data-skin="belay"] nav{background:rgba(27,29,33,.95)}
-@media (prefers-reduced-motion:no-preference){
-  /* belayer taking in: the rope texture creeps upward */
-  :root[data-skin="belay"] main::before{animation:rope 2.8s linear infinite}
-  @keyframes rope{to{background-position:0 -36px}}
-  /* clip-in: the carabiner swings and settles when a card appears */
-  :root[data-skin="belay"] .card::before{animation:clip 1.4s cubic-bezier(.3,1.6,.5,1) both}
-  @keyframes clip{0%{transform:rotate(38deg)}35%{transform:rotate(-22deg)}60%{transform:rotate(10deg)}80%{transform:rotate(-4deg)}100%{transform:rotate(0)}}
-  :root[data-skin="belay"] main .card:nth-child(2)::before{animation-delay:.15s} :root[data-skin="belay"] main .card:nth-child(3)::before{animation-delay:.3s}
-  /* chalk puff: a white cloud blooms and fades over each new card */
-  :root[data-skin="belay"] .card{animation:chalk .9s ease-out both}
-  @keyframes chalk{0%{opacity:0;box-shadow:0 0 0 0 rgba(255,255,255,.55);transform:translateY(8px)}40%{opacity:1;box-shadow:0 0 30px 14px rgba(255,255,255,.18)}100%{box-shadow:0 0 0 0 rgba(255,255,255,0);transform:none}}
-}
-
+/* commute card + settings */
+:root[data-skin="game"] .legs span{font-size:8px;line-height:1.6}
+.cdays{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin:10px 0}
+.cdays button{padding:8px 0;font-size:12px}
+.cdays button.on{border-color:var(--accent);color:var(--accent)}
+.btnlink{display:inline-block;padding:9px 12px;border:1px solid var(--line);border-radius:8px;color:var(--accent);text-decoration:none;font-size:13px;margin:2px 0}
+.legs{display:grid;gap:8px}
+.legs>div{padding:10px 12px;border:1px solid var(--line);border-radius:8px}
+.legs>div.done{opacity:.45}
+.legs span{display:block;font:600 10px var(--disp);letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:3px}
+.gobar{padding:10px 12px;margin-bottom:10px;border-radius:8px;background:rgba(var(--acc-rgb),.12);border:1px solid var(--accent)}
+.card.go{outline:1px solid var(--accent)}
 /* main-screen bits */
 .plan{margin-top:12px;padding:10px 12px;border-radius:8px;border:1px dashed rgba(var(--acc-rgb),.35);font-size:14px}
 .plan span{display:block;font:600 10px var(--disp);letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:3px}
@@ -227,13 +296,6 @@ main .card:nth-child(2){animation-delay:.06s} main .card:nth-child(3){animation-
 
 /* ===== Per-skin ambient animation (all off with reduced motion) ===== */
 @media (prefers-reduced-motion:no-preference){
-  /* CYBER: a scan beam sweeps down the screen every few seconds */
-  :root:not([data-skin]) body::before,:root[data-skin="cyber"] body::before{content:"";position:fixed;left:0;right:0;top:-120px;height:120px;pointer-events:none;z-index:1;
-    background:linear-gradient(180deg,transparent,rgba(var(--acc-rgb),.07) 70%,rgba(var(--acc-rgb),.35) 99%,transparent);animation:scan 5.5s cubic-bezier(.5,0,.5,1) infinite}
-  @keyframes scan{0%{transform:translateY(0)}70%,100%{transform:translateY(calc(100vh + 120px))}}
-  :root[data-skin="cyber"] .card::before,:root[data-skin="cyber"] .card::after{animation:bracket 2.4s ease-in-out infinite}
-  @keyframes bracket{50%{opacity:.25}}
-
   /* SYNTHWAVE: retro perspective floor grid rolling toward you under a glowing sun */
   :root[data-skin="synth"] body::before{content:"";position:fixed;left:-50%;right:-50%;bottom:0;height:42vh;pointer-events:none;z-index:0;
     background:linear-gradient(rgba(255,79,216,.55) 2px,transparent 2px) 0 0/100% 40px,linear-gradient(90deg,rgba(79,195,255,.45) 2px,transparent 2px) 0 0/60px 100%;
@@ -253,6 +315,32 @@ main .card:nth-child(2){animation-delay:.06s} main .card:nth-child(3){animation-
   :root[data-skin="term"] .card{animation:boot .45s steps(6) both}
   @keyframes boot{from{clip-path:inset(0 0 100% 0)}to{clip-path:inset(0 0 0 0)}}
   :root[data-skin="term"] .tile b,:root[data-skin="term"] .ring .num{text-shadow:0 0 6px rgba(57,255,20,.7)}
+
+  /* TERMINAL extra: a slow bright band rolls down the tube like a CRT refresh */
+  :root[data-skin="term"] body::before{background:
+    linear-gradient(180deg,transparent 0,rgba(57,255,20,.06) 50%,transparent 100%) 0 -30vh/100% 30vh no-repeat,
+    radial-gradient(ellipse 90% 80% at 50% 45%,transparent 60%,rgba(0,0,0,.55) 100%);animation:roll 7s linear infinite}
+  @keyframes roll{to{background-position:0 130vh,0 0}}
+
+  /* PLAYER ONE: twinkling pixel stars, +XP pops up, low HP bar blinks */
+  :root[data-skin="game"] body::before,:root[data-skin="game"] body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+    background:radial-gradient(#fff 0 1px,transparent 1.5px) 0 0/97px 89px,radial-gradient(#ffd34d 0 1px,transparent 1.5px) 40px 55px/131px 117px;opacity:.5;animation:twinkle 3.2s steps(2) infinite}
+  :root[data-skin="game"] body::after{background:radial-gradient(#4dc3ff 0 1.5px,transparent 2px) 20px 30px/173px 151px,radial-gradient(#fff 0 1px,transparent 1.5px) 70px 10px/61px 143px;animation-delay:1.6s}
+  @keyframes twinkle{50%{opacity:.15}}
+  :root[data-skin="game"] header,:root[data-skin="game"] main{position:relative;z-index:1}
+  .xpgain{animation:xpUp 1.6s ease-out both .4s}
+  @keyframes xpUp{0%{opacity:0;transform:translateY(10px)}30%{opacity:1;transform:translateY(-4px)}100%{opacity:1;transform:none}}
+  .bar8.low i{animation:blinkHp .8s steps(1) infinite}
+  @keyframes blinkHp{50%{opacity:.35}}
+
+  /* ON BELAY: faint chalk dust drifting up through the screen (two slow layers) */
+  :root[data-skin="belay"] body::before,:root[data-skin="belay"] body::after{content:"";position:fixed;inset:-20% 0 0;pointer-events:none;z-index:0;
+    background:radial-gradient(rgba(236,235,230,.22) 0 1px,transparent 2px) 0 0/83px 97px,radial-gradient(rgba(236,235,230,.12) 0 1.5px,transparent 2.5px) 30px 40px/149px 131px;
+    animation:chalkDrift 26s linear infinite;filter:blur(.4px)}
+  :root[data-skin="belay"] body::after{background-size:113px 89px,197px 173px;animation-duration:41s;opacity:.7}
+  @keyframes chalkDrift{to{transform:translateY(-20%)}}
+  :root[data-skin="belay"] header,:root[data-skin="belay"] main{position:relative;z-index:1}
+  :root[data-skin="belay"] .card{animation:lift .55s cubic-bezier(.2,.8,.2,1) both}
 
   /* PRO: calm. Cards lift in, a soft pulse on the readiness ring, nothing in the background */
   :root[data-skin="pro"] .card{animation:lift .5s cubic-bezier(.2,.8,.2,1) both}
@@ -300,11 +388,20 @@ main .card:nth-child(2){animation-delay:.06s} main .card:nth-child(3){animation-
       <button id="clearBtn">Clear stored data</button>
     </div>
     <div class="card">
+      <h2>Commute</h2>
+      <p class="muted">Days you ride to work. Today plans each leg and tells you when to start the watch.</p>
+      <div class="cdays" id="cDays"></div>
+      <div class="tiles" style="grid-template-columns:1fr 1fr"><div><label for="cAm">Leave home</label><input id="cAm" type="time"></div>
+        <div><label for="cPm">Leave work</label><input id="cPm" type="time"></div></div>
+      <p class="muted">Reminder on your wrist: add these to Google Calendar. Garmin Connect forwards calendar alerts to the Venu 2.</p>
+      <p><a class="btnlink" id="calAm" target="_blank" rel="noopener">+ Morning reminder</a> <a class="btnlink" id="calPm" target="_blank" rel="noopener">+ Evening reminder</a></p>
+    </div>
+    <div class="card">
       <h2>Look</h2>
       <div class="skins">
-        <button data-skin="cyber">Cyber HUD</button><button data-skin="synth">Synthwave</button>
-        <button data-skin="term">Terminal</button><button data-skin="pro">Pro (light)</button>
-        <button data-skin="belay">On Belay</button>
+        <button data-skin="term">Terminal</button><button data-skin="game">Player One</button>
+        <button data-skin="belay">On Belay</button><button data-skin="synth">Synthwave</button>
+        <button data-skin="pro">Pro (light)</button>
       </div>
     </div>
   </main>

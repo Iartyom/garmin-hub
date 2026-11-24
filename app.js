@@ -15,18 +15,36 @@ let cfg = LS.get("gh.cfg", { key: "", athlete: "0" });
 let db = LS.get("gh.db", null);            // {wellness:[...asc by date], acts:[...desc by date], at, demo}
 let tab = LS.get("gh.tab", "today");
 // Skin = CSS token set on <html data-skin>; ?skin=x in the URL overrides (for previews/screenshots).
-const SKIN_BAR = { cyber: "#06080c", synth: "#10051c", term: "#020802", pro: "#f2f3f5", belay: "#1b1d21" };
-// Readiness score → French sport-climbing grade, for the On Belay skin (4 = rest day … 7a = send day).
-const GRADES = ["4", "5a", "5b", "5c", "6a", "6a+", "6b", "6b+", "6c", "7a"];
-const gradeOf = s => GRADES[Math.min(GRADES.length - 1, Math.max(0, Math.floor(s / 10)))];
+const SKIN_BAR = { term: "#020802", game: "#0b0d26", belay: "#15171a", synth: "#10051c", pro: "#f2f3f5" };
+// Per-skin vocabulary: the same screen speaks plain English, shell or RPG. Missing keys fall back to base.
+const WORDS = {
+  base: { brand: "GARMIN·HUB", today: "Today", rides: "Rides", fitness: "Fitness", sleep: "Sleep",
+    readiness: "Readiness", plan: "Today's plan", engine: "Engine", riding: "Riding", vo2: "VO2max", rhr: "Resting HR", steps: "Steps/day",
+    night: "Last night", sleepAvg: "Sleep avg", floors: "Floors", week: "This week", nRides: "Rides", longest: "Longest",
+    hard: "Go hard", moderate: "Moderate", easy: "Take it easy", calib: "Calibrating" },
+  term: { brand: "user@garmin-hub:~$", today: "./today", rides: "./rides", fitness: "./fitness", sleep: "./sleep",
+    readiness: "readiness --today", plan: "suggested_cmd", engine: "engine --from-body", riding: "rides --summary",
+    vo2: "vo2max", rhr: "rest_hr", steps: "steps/day", night: "sleep_last", sleepAvg: "sleep_avg", floors: "floors",
+    week: "this_week", nRides: "rides", longest: "longest",
+    hard: "STATUS: GO HARD", moderate: "STATUS: MODERATE", easy: "STATUS: REST", calib: "STATUS: CALIBRATING" },
+  game: { brand: "PLAYER ONE", today: "Status", rides: "Quests", fitness: "Training", sleep: "Inn",
+    readiness: "HP", plan: "Next quest", engine: "Character stats", riding: "Quest log",
+    vo2: "STA·VO2max", rhr: "DEF·Rest HR", steps: "AGI·Steps", night: "MANA·Sleep", sleepAvg: "MANA avg", floors: "Floors",
+    week: "This week", nRides: "Quests", longest: "Longest",
+    hard: "Full HP! Attack!", moderate: "Half HP. Grind.", easy: "Low HP. Rest at the inn.", calib: "Loading save..." },
+  // "Beta" = climbers' word for advice on how to do a route.
+  belay: { brand: "ON BELAY", readiness: "Today's route", plan: "Beta",
+    hard: "Climb on", moderate: "Top-rope day", easy: "Take", calib: "On belay?" },
+};
+const T = k => (WORDS[skin] && WORDS[skin][k]) || WORDS.base[k];
 function setSkin(s) {
-  if (!SKIN_BAR[s]) s = "cyber";
+  if (!SKIN_BAR[s]) s = "term";   // also migrates the removed cyber/belay skins
   document.documentElement.dataset.skin = s;
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", SKIN_BAR[s]);
   document.querySelectorAll("[data-skin]").forEach(b => b.classList && b.tagName === "BUTTON" && b.classList.toggle("on", b.dataset.skin === s));
   return s;
 }
-let skin = setSkin((location.search.match(/[?&]skin=(\w+)/) || [])[1] || LS.get("gh.skin", "cyber"));
+let skin = setSkin((location.search.match(/[?&]skin=(\w+)/) || [])[1] || LS.get("gh.skin", "term"));
 let fitRange = 90;
 
 /* ---------- dates & formatting ---------- */
@@ -205,28 +223,36 @@ function renderToday(v) {
   // Stale-data nudge: the phone sync is also what refreshes the watch's satellite data (faster GPS lock).
   if (latest && daysAgo(latest.d) >= 2) h += `<div class="warnbar"><b>Watch last synced ${daysAgo(latest.d)} days ago.</b> Open Garmin Connect on your phone and let it sync, which also refreshes GPS satellite data so your next ride locks faster. Then tap Sync here.</div>`;
   const rides = db.acts.filter(isRide);
+  if (skin === "game") h += xpCard(rides);
   if (R) {
-    // On Belay speaks in belay calls; other skins use plain words.
-    const belay = skin === "belay";
-    const V = { hard: [belay ? "Climb on!" : "Go hard", css("--good")], moderate: [belay ? "Top rope day" : "Moderate", css("--warn")],
-      easy: [belay ? "Take!" : "Take it easy", css("--bad")], calib: [belay ? "On belay?" : "Calibrating", css("--s1")] }[R.level];
+    const col = { hard: css("--good"), moderate: css("--warn"), easy: css("--bad"), calib: css("--s1") }[R.level];
     const notes = R.level === "calib" ? [`<li>Learning your normal: ${R.need} more day${R.need === 1 ? "" : "s"} of watch data needed.</li>`] : [];
-    const ringLabel = R.level === "calib" ? "WAIT" : belay ? "GRADE " + gradeOf(R.score) : "READY";
-    h += `<div class="card"><h2>Readiness · ${short(R.last.d)}</h2><div class="verdict">${ring(R.score ?? null, V[1], ringLabel)}<div><h3 style="color:${V[1]}">${V[0]}</h3>
+    // Readiness widget by skin: ASCII bar (terminal), pixel HP bar (game), neon ring (others).
+    const sc = R.score ?? null;
+    const widget = skin === "term"
+      ? `<pre class="ascii" style="--lvl:${col}" data-fill="${sc ?? 0}">${asciiBar(sc ?? 0)} ${sc == null ? "--" : sc}%<small>readiness score / 100</small></pre>`
+      : skin === "belay"
+      ? topo(sc, col)
+      : skin === "game"
+      ? `<div style="--lvl:${col}"><div class="barhead"><span>❤ HP</span><b>${sc == null ? "??" : sc}/100</b></div><div class="bar8${R.level === "easy" ? " low" : ""}"><i data-w="${sc ?? 0}" style="width:${sc ?? 0}%"></i></div></div>`
+      : ring(sc, col, R.level === "calib" ? "WAIT" : "READY");
+    const stack = skin === "term" || skin === "game";   // belay keeps the side-by-side layout (topo left, words right)
+    h += `<div class="card"><h2>${T("readiness")} · ${short(R.last.d)}</h2><div class="verdict${stack ? " stack" : ""}">${widget}<div><h3 class="type" style="color:${col}">${T(R.level)}</h3>
       <ul>${notes.join("")}${R.flags.map(f => `<li class="flag">${esc(f)}</li>`).join("")}${R.good.map(f => `<li>${esc(f)}</li>`).join("")}</ul></div></div>
-      <div class="plan"><span>Today's plan</span>${esc(suggestion(R.level, rides))}</div></div>`;
+      <div class="plan"><span>${T("plan")}</span><span class="type" style="all:unset">${esc(suggestion(R.level, rides))}</span></div></div>`;
   }
   // Engine: fitness read from the BODY, so it includes the running/gym that was never logged.
   const vo = W.filter(x => x.vo2), voNow = vo.at(-1), vo90 = vo.find(x => daysAgo(x.d) <= 90);
   const rhr7 = avgDays(W, "rhr", 0, 6), rhr90 = avgDays(W, "rhr", 84, 97), st7 = avgDays(W, "steps", 0, 6), st14 = avgDays(W, "steps", 7, 13);
   const sl7 = avgDays(W, "sleep", 0, 6), sl14 = avgDays(W, "sleep", 7, 13), w = latest || {};
-  h += `<div class="card"><h2>Engine</h2><div class="tiles">
-    ${dTile(voNow ? voNow.vo2.toFixed(0) : "–", "VO2max", voNow && vo90 && vo90 !== voNow ? voNow.vo2 - vo90.vo2 : null, false, "vs 90 days", v => v.toFixed(1))}
-    ${dTile(rhr7 ? r0(rhr7) : "–", "Resting HR", rhr7 && rhr90 ? rhr7 - rhr90 : null, true, "vs 3 months", v => r0(Math.abs(v)) + " bpm")}
-    ${dTile(st7 ? r0(st7).toLocaleString() : "–", "Steps/day", st7 && st14 ? (st7 - st14) / st14 * 100 : null, false, "vs last week", v => r0(Math.abs(v)) + "%")}
-    ${dTile(w.sleep ? hm(w.sleep) : "–", "Last night", null, false, w.sleepScore ? `score ${w.sleepScore}` : "")}
-    ${dTile(sl7 ? hm(sl7) : "–", "Sleep avg", sl7 && sl14 ? (sl7 - sl14) / 60 : null, false, "vs last week", v => r0(Math.abs(v)) + " min")}
-    ${dTile(w.floors ?? "–", "Floors", null, false, "today")}
+  h += commuteCard(R ? R.level : "calib", rides);
+  h += `<div class="card"><h2>${T("engine")}</h2><div class="tiles">
+    ${dTile(voNow ? voNow.vo2.toFixed(0) : "–", T("vo2"), voNow && vo90 && vo90 !== voNow ? voNow.vo2 - vo90.vo2 : null, false, "vs 90 days", v => v.toFixed(1))}
+    ${dTile(rhr7 ? r0(rhr7) : "–", T("rhr"), rhr7 && rhr90 ? rhr7 - rhr90 : null, true, "vs 3 months", v => r0(Math.abs(v)) + " bpm")}
+    ${dTile(st7 ? r0(st7).toLocaleString() : "–", T("steps"), st7 && st14 ? (st7 - st14) / st14 * 100 : null, false, "vs last week", v => r0(Math.abs(v)) + "%")}
+    ${dTile(w.sleep ? hm(w.sleep) : "–", T("night"), null, false, w.sleepScore ? `score ${w.sleepScore}` : "")}
+    ${dTile(sl7 ? hm(sl7) : "–", T("sleepAvg"), sl7 && sl14 ? (sl7 - sl14) / 60 : null, false, "vs last week", v => r0(Math.abs(v)) + " min")}
+    ${dTile(w.floors ?? "–", T("floors"), null, false, "today")}
   </div><p class="muted note">Read from your body, not from logged workouts, so the running and gym you never recorded still count. Falling resting HR and rising VO2max = getting fitter.</p></div>`;
   // Riding progress: you're new to the bike, so track the first-months curve (distance, speed, longest).
   if (rides.length) {
@@ -234,11 +260,49 @@ function renderToday(v) {
     const wk = rides.filter(a => daysAgo(a.date.slice(0, 10)) < 7), wkKm = wk.reduce((s, a) => s + (a.dist || 0), 0), wkT = wk.reduce((s, a) => s + (a.time || 0), 0);
     const last = rides[0], prev = rides.slice(1, 11).filter(a => a.spd), avgPrev = prev.length ? mean(prev.map(a => a.spd)) : null;
     const tile = (val, lab, sub) => `<div class="tile"><span>${lab}</span><b>${val}</b>${sub ? `<small>${sub}</small>` : ""}</div>`;
-    h += `<div class="card"><h2>Riding</h2><div class="tiles">
-      ${tile(wk.length, "This week", `${km(wkKm)} km · ${hm(wkT)}`)}${tile(rides.length, "Rides", `${km(tot)} km total`)}${tile(km(longest), "Longest", "km")}
+    h += `<div class="card"><h2>${T("riding")}</h2><div class="tiles">
+      ${tile(wk.length, T("week"), `${km(wkKm)} km · ${hm(wkT)}`)}${tile(rides.length, T("nRides"), `${km(tot)} km total`)}${tile(km(longest), T("longest"), "km")}
     </div>${rideButton(last)}${avgPrev ? `<p class="muted note">Last ride ${kmh(last.spd)} km/h vs your recent average ${kmh(avgPrev)} km/h (${last.spd >= avgPrev ? "▲ faster" : "▼ slower"}).</p>` : ""}</div>`;
   }
   v.innerHTML = h;
+}
+// 20-cell ASCII bar, filled to the score (terminal skin).
+const asciiBar = s => "[" + "█".repeat(Math.round(s / 5)) + "░".repeat(20 - Math.round(s / 5)) + "]";
+// Readiness → French sport grade (On Belay): 4 = rest day … 7a = send day.
+const GRADES = ["4", "5a", "5b", "5c", "6a", "6a+", "6b", "6b+", "6c", "7a"];
+const gradeOf = s => GRADES[Math.min(GRADES.length - 1, Math.max(0, Math.floor((s ?? 0) / 10)))];
+// Guidebook-style route topo: wavy line, bolts as ×, anchor (two rings) on top, climber dot at score height.
+// Bolts below the climber are drawn "clipped" (accent colour). x(y) is shared so the dot sits on the line.
+function topo(score, col) {
+  const H = 150, top = 16, bot = 140, xAt = y => 38 + 9 * Math.sin((bot - y) / 22);
+  let d = ""; for (let y = bot; y >= top; y -= 3) d += `${d ? "L" : "M"}${xAt(y).toFixed(1)},${y}`;
+  const s = score ?? 0, cy = bot - (bot - top) * s / 100;
+  const bolts = [124, 104, 84, 64, 44].map(y => `<g class="bolt${y >= cy ? " clipped" : ""}" data-y="${y}" transform="translate(${xAt(y).toFixed(1)},${y})"><path d="M-4,-4L4,4M4,-4L-4,4"/></g>`).join("");
+  return `<div class="topo"><svg viewBox="0 0 84 ${H}" width="100" height="${Math.round(H*100/84)}" data-score="${s}">
+    <path d="${d}" class="route"/>${bolts}
+    <g transform="translate(${xAt(top).toFixed(1)},${top - 6})" class="anchor"><circle cx="-4" r="3.2"/><circle cx="4" r="3.2"/></g>
+    <circle class="climber" r="6" cx="${xAt(cy).toFixed(1)}" cy="${cy.toFixed(1)}" fill="${col}"/></svg>
+    <div class="grade"><b>${score == null ? "–" : gradeOf(score)}</b><small>${score == null ? "" : score + "/100"}</small></div></div>`;
+}
+// Player One: XP from everything the watch saw, so unlogged days still level you up.
+// 1 XP per 100 steps, 5 per floor, 30 per km ridden. Level L needs 250·L·(L−1) XP total (gentle quadratic curve).
+const xpOfDay = (w = {}) => (w.steps || 0) / 100 + (w.floors || 0) * 5;
+const levelOf = xp => Math.floor((1 + Math.sqrt(1 + xp / 62.5)) / 2);
+const xpForLevel = L => 250 * L * (L - 1);
+function xpCard(rides) {
+  const xp = Math.round(db.wellness.reduce((s, w) => s + xpOfDay(w), 0) + rides.reduce((s, a) => s + (a.dist || 0) / 1000 * 30, 0));
+  const today = iso(new Date()), gain = Math.round(xpOfDay(db.wellness.find(w => w.d === today)) + rides.filter(a => a.date.startsWith(today)).reduce((s, a) => s + (a.dist || 0) / 1000 * 30, 0));
+  const L = levelOf(xp), lo = xpForLevel(L), hi = xpForLevel(L + 1), pct = (xp - lo) / (hi - lo) * 100;
+  // Level-up fanfare once, when the level is higher than the one seen last time.
+  const seen = LS.get("gh.lvl", null); if (seen != null && L > seen) setTimeout(() => levelUp(L), 400); LS.set("gh.lvl", L);
+  return `<div class="card xpcard"><div class="row"><div><div class="tile" style="all:unset"><span style="font:400 8px 'Press Start 2P';color:var(--s1)">LEVEL</span></div><div class="lv">${L}</div></div>
+    <div style="text-align:right;font:400 9px/1.8 'Press Start 2P'">${xp.toLocaleString()} XP${gain ? `<br><span class="xpgain">+${gain} XP today</span>` : ""}</div></div>
+    <div class="bar8" style="margin-top:12px"><i data-w="${pct.toFixed(1)}" style="width:${pct.toFixed(1)}%"></i></div>
+    <p class="muted note" style="font-size:11px">${(hi - xp).toLocaleString()} XP to level ${L + 1}. Steps, floors and km all count.</p></div>`;
+}
+function levelUp(L) {
+  const d = document.createElement("div"); d.className = "lvup"; d.textContent = `LEVEL ${L}!`; document.body.append(d);
+  buzz([30, 40, 30]); setTimeout(() => d.remove(), 2300);
 }
 // Mean of a wellness field over days [fromAgo..toAgo] back from today (ignores empty days).
 function avgDays(W, f, fromAgo, toAgo) { const v = W.filter(w => { const a = daysAgo(w.d); return a >= fromAgo && a <= toAgo; }).map(w => w[f]).filter(x => x); return v.length ? mean(v) : null; }
@@ -254,11 +318,76 @@ function dTile(val, lab, diff, downIsGood, sub, fmt) {
 // One-line plan for a new rider: build distance ~10-15% at a time, easy when the body says so.
 function suggestion(level, rides) {
   const longest = rides.length ? Math.max(...rides.map(a => a.dist || 0)) / 1000 : 0;
+  // On commute days the two legs ARE the training; the Commute card has the per-leg plan, so don't stack a 70 km ride on top.
+  if (commute.days.includes(new Date().getDay()))
+    return level === "easy" ? "Commute day, low battery: ride both legs easy and skip extra training." : "Commute day: the two legs are today's training. Plan for each leg below.";
   if (level === "easy") return "Rest, a walk, or 30 min of very easy spinning. Your body is still recovering.";
   if (level === "moderate") return "Steady 45–60 min ride at a pace where you can still talk (zone 2).";
   if (level === "calib") return "Ride by feel; the app is still learning your normal resting HR.";
   if (!rides.length) return "Good day for a first proper ride: 45–60 min, easy to steady.";
   return `Good day to push: try a ride of ~${Math.round(longest * 1.15)} km (longest so far ${longest.toFixed(1)} km), or add a few hard 3-min efforts.`;
+}
+
+/* ---------- Commute ---------- */
+// The user's rides are a fixed commute (same route, set days, morning + evening). Settings hold the days/times;
+// the Today card says whether today is a commute day, what to do on each leg, and when to start the watch.
+let commute = LS.get("gh.commute", { days: [1, 2, 3], am: "07:30", pm: "17:30" });   // JS getDay(): 1=Mon
+const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const toMin = t => { const [h, m] = (t || "0:0").split(":").map(Number); return h * 60 + m; };
+// One workout per leg, picked by readiness. Morning stays easier: you arrive at work, not at your own shower.
+function commutePlan(level) {
+  return {
+    hard: ["Easy warm spin, zone 2.", "3 × 3 min hard on the straightest stretch, 2 min easy between."],
+    moderate: ["Steady zone 2, you can still talk.", "Zone 2 plus 5 × 20 s fast spin-ups (high cadence, light gear)."],
+    easy: ["Very easy, low gear. Recovery ride.", "Same, no efforts. The commute is today's whole workout."],
+    calib: ["Ride by feel, steady.", "Ride by feel, steady."],
+  }[level] || ["Ride by feel.", "Ride by feel."];
+}
+// Same-route rides: commute-day rides within ±25% of their median distance (drops weekend long rides).
+function commuteRides(rides) {
+  const c = rides.filter(a => commute.days.includes(parseDay(a.date.slice(0, 10)).getDay()));
+  if (!c.length) return [];
+  const ds = c.map(a => a.dist || 0).sort((a, b) => a - b), med = ds[ds.length >> 1];
+  return c.filter(a => Math.abs((a.dist || 0) - med) <= med * .25);
+}
+function commuteCard(level, rides) {
+  if (!commute.days.length) return "";
+  const now = new Date(), dow = now.getDay(), mins = now.getHours() * 60 + now.getMinutes();
+  const isDay = commute.days.includes(dow), P = commutePlan(level), am = toMin(commute.am), pm = toMin(commute.pm);
+  // days until the next commute day (today counts only if the evening leg hasn't passed)
+  const next = commute.days.map(d => (d - dow + 7) % 7 || (mins > pm + 15 ? 7 : 0)).sort((a, b) => a - b)[0];
+  // "Go" window: 30 min before a leg until 15 min after it. That's when to start Bike on the watch.
+  const leg = isDay && ((mins >= am - 30 && mins <= am + 15) || (mins >= pm - 30 && mins <= pm + 15));
+  const C = commuteRides(rides), best = C.length >= 2 ? C.reduce((b, a) => a.time < b.time ? a : b) : null;
+  const avg = C.length >= 2 ? C.reduce((s, a) => s + (a.spd || 0), 0) / C.length : null;
+  let h = `<div class="card${leg ? " go" : ""}"><h2>Commute${isDay ? " day" : ""}</h2>`;
+  if (leg) h += `<div class="gobar"><b>⏱ Start Bike on your watch now.</b> Step outside first and wait for the GPS ring to go green (about 30 s), then press Start.</div>`;
+  if (isDay) h += `<div class="legs"><div class="${mins > am + 15 ? "done" : ""}"><span>Morning · ${esc(commute.am)}</span>${esc(P[0])}</div>
+      <div class="${mins > pm + 15 ? "done" : ""}"><span>Evening · ${esc(commute.pm)}</span>${esc(P[1])}</div></div>`;
+  else h += `<p>No commute today. Next one ${next === 1 ? "tomorrow" : DAYS[(dow + next) % 7]}. Good slot for 20–30 min of strength (squats, lunges, core): stronger legs push harder on the bike.</p>`;
+  if (best) h += `<p class="muted note">${C.length} commute rides · fastest ${hm(best.time)} (${dayName(best.date)}) · average ${kmh(avg)} km/h</p>`;
+  return h + `</div>`;
+}
+// Google Calendar "add event" link with a weekly repeat. The calendar alert pops on the phone and
+// Garmin Connect forwards it to the Venu 2 as a notification: the "start the clock" nudge on the wrist.
+function calLink(label, time) {
+  const by = commute.days.map(d => ["SU", "MO", "TU", "WE", "TH", "FR", "SA"][d]).join(",");
+  const d = new Date(); for (let i = 0; i < 7 && !commute.days.includes(d.getDay()); i++) d.setDate(d.getDate() + 1);
+  const [hh, mm] = time.split(":").map(Number), endM = hh * 60 + mm + 45, ymd = iso(d).replace(/-/g, "");
+  const p2 = n => String(n).padStart(2, "0");
+  const q = new URLSearchParams({ action: "TEMPLATE", text: `${label} commute: start Bike on watch`,
+    dates: `${ymd}T${p2(hh)}${p2(mm)}00/${ymd}T${p2(Math.floor(endM / 60) % 24)}${p2(endM % 60)}00`,
+    details: "Step outside, wait for GPS lock, press Start on the Venu 2.", recur: `RRULE:FREQ=WEEKLY;BYDAY=${by}` });
+  return "https://calendar.google.com/calendar/render?" + q;
+}
+function fillCommuteSettings() {
+  $("#cDays").innerHTML = [1, 2, 3, 4, 5, 6, 0].map(d => `<button data-cday="${d}" class="${commute.days.includes(d) ? "on" : ""}">${DAYS[d]}</button>`).join("");
+  $("#cAm").value = commute.am; $("#cPm").value = commute.pm;
+  $("#calAm").href = calLink("Morning", commute.am); $("#calPm").href = calLink("Evening", commute.pm);
+}
+function saveCommute() {
+  commute = { days: [...document.querySelectorAll("#cDays .on")].map(b => +b.dataset.cday), am: $("#cAm").value || "07:30", pm: $("#cPm").value || "17:30" };
+  LS.set("gh.commute", commute); fillCommuteSettings();
 }
 
 /* ---------- Rides ---------- */
@@ -417,7 +546,9 @@ function status(t) { $("#status").textContent = t || ""; }
 const buzz = ms => { try { navigator.vibrate && navigator.vibrate(ms); } catch { } };
 function render() {
   document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === tab));
-  $("#title").innerHTML = "<small>GARMIN·HUB</small>" + { today: "Today", rides: "Rides", fitness: "Fitness", sleep: "Sleep" }[tab];
+  $("#title").innerHTML = `<small>${esc(T("brand"))}</small>` + esc(T(tab));
+  // Nav labels follow the skin's vocabulary: rewrite only the button's trailing text node (the icon stays).
+  document.querySelectorAll("#tabs button").forEach(b => { const n = [...b.childNodes].reverse().find(x => x.nodeType === 3 && x.textContent.trim()); if (n) n.textContent = T(b.dataset.tab); });
   const v = $("#view");
   if (!db) { v.innerHTML = `<div class="card"><h2>Welcome</h2><p>Connect Intervals.icu in Settings (⚙) to see your Garmin data, or try the demo first.</p><button class="primary" id="goSet">Open settings</button> <button id="goDemo">Try demo data</button></div>`; return; }
   if (db.demo) status("Demo data. Add your Intervals.icu key in Settings for your own.");
@@ -442,10 +573,46 @@ function animateIn(root) {
     c.style.strokeDasharray = `0 ${C}`; c.style.transition = "stroke-dasharray 1.1s cubic-bezier(.2,.8,.2,1)";
     requestAnimationFrame(() => requestAnimationFrame(() => c.style.strokeDasharray = full));
   });
+  // Terminal: ASCII bar fills cell by cell, then the verdict types itself out.
+  root.querySelectorAll(".ascii[data-fill]").forEach(pre => {
+    const n = pre.firstChild, end = +pre.dataset.fill, tail = n.textContent.slice(22);   // 22 = "[" + 20 cells + "]"
+    let s = 0; const id = setInterval(() => { s = Math.min(end, s + 5); n.textContent = asciiBar(s) + tail; if (s >= end) clearInterval(id); }, 45);
+  });
+  if (skin === "term") root.querySelectorAll(".type").forEach((el, k) => {
+    const full = el.textContent; el.textContent = ""; let i = 0;
+    setTimeout(() => { const id = setInterval(() => { el.textContent = full.slice(0, ++i); if (i >= full.length) clearInterval(id); }, 22); }, 400 + k * 500);
+  });
+  // Player One: HP / XP bars slide from empty.
+  root.querySelectorAll(".bar8 i[data-w]").forEach(i => {
+    i.style.transition = "none"; i.style.width = "0%";
+    requestAnimationFrame(() => requestAnimationFrame(() => { i.style.transition = "width 1.2s steps(16)"; i.style.width = i.dataset.w + "%"; }));
+  });
+  // On Belay: the climber climbs the route from the ground to today's score, clipping bolts on the way.
+  // Same curve as topo(): x = 38 + 9·sin((bot − y)/22).
+  root.querySelectorAll(".topo svg[data-score]").forEach(svg => {
+    const dot = svg.querySelector(".climber"), bolts = [...svg.querySelectorAll(".bolt")], top = 16, bot = 140;
+    const end = bot - (bot - top) * +svg.dataset.score / 100, t0 = performance.now(), dur = 1600;
+    bolts.forEach(b => b.classList.remove("clipped"));
+    const step = t => { const p = Math.min(1, (t - t0) / dur), e = 1 - (1 - p) ** 2, y = bot + (end - bot) * e;
+      dot.setAttribute("cy", y.toFixed(1)); dot.setAttribute("cx", (38 + 9 * Math.sin((bot - y) / 22)).toFixed(1));
+      bolts.forEach(b => b.classList.toggle("clipped", +b.dataset.y >= y)); if (p < 1) requestAnimationFrame(step); };
+    requestAnimationFrame(step);
+  });
+}
+// Terminal boot screen: once per app launch, fakes a short BIOS/link sequence over the real data counts.
+function bootScreen() {
+  if (skin !== "term" || sessionStorage.getItem("gh.boot") || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  sessionStorage.setItem("gh.boot", "1");
+  const L = ["GARMIN-HUB BIOS v2.0  (c) you", "MEM CHECK ........ <span class=ok>OK</span>", "LINK intervals.icu  <span class=ok>OK</span>",
+    db ? `LOAD ${db.wellness.length} days / ${db.acts.length} activities` : "LOAD no data yet", "READY_"];
+  const d = document.createElement("div"); d.id = "boot";
+  d.innerHTML = L.map((l, k) => `<div style="animation-delay:${(k * .32).toFixed(2)}s">${l}</div>`).join("");
+  document.body.append(d); setTimeout(() => d.remove(), 2400);
 }
 function openSettings() {
   $("#key").value = cfg.key; $("#ath").value = cfg.athlete;
   $("#dataInfo").textContent = db ? `${db.demo ? "Demo data" : "Synced"}: ${db.wellness.length} days, ${db.acts.length} activities. Last sync ${new Date(db.at).toLocaleString()}.` : "Nothing stored.";
+  fillCommuteSettings();
   $("#settings").classList.add("open");
 }
 function useDemo() { db = demoData(); LS.set("gh.db", db); $("#settings").classList.remove("open"); render(); }
@@ -459,18 +626,20 @@ document.addEventListener("click", e => {
   else if (t.id === "setClose") $("#settings").classList.remove("open");
   else if (t.id === "rideClose") { $("#rideSheet").classList.remove("open"); $("#rideBody").innerHTML = ""; }
   else if (t.id === "demoBtn" || t.id === "goDemo") useDemo();
+  else if (t.dataset.cday) { t.classList.toggle("on"); saveCommute(); render(); }
   else if (t.dataset.skin) { skin = setSkin(t.dataset.skin); LS.set("gh.skin", skin); render(); }   // re-render: chart colours are read from CSS
   else if (t.id === "saveBtn") {
     cfg = { key: $("#key").value.trim(), athlete: $("#ath").value.trim() || "0" }; LS.set("gh.cfg", cfg);
     $("#settings").classList.remove("open"); if (db && db.demo) db = null; sync();
   } else if (t.id === "clearBtn") { LS.del("gh.db"); db = null; openSettings(); render(); }
 });
+document.addEventListener("change", e => { if (e.target.id === "cAm" || e.target.id === "cPm") { saveCommute(); render(); } });
 // Charts are sized from their container width, so redraw on rotation/resize (debounced).
 let rz; addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(render, 200); });
 // ?demo loads demo data and #rides/#fitness/#sleep picks a tab: handy links for testing and showing the app.
 if (/[?&]demo\b/.test(location.search) && (!db || db.demo)) db = demoData();
 if (/^#(today|rides|fitness|sleep)$/.test(location.hash)) tab = location.hash.slice(1);
-render();
+render(); bootScreen();
 if (location.hash === "#ride" && db) { const r = db.acts.find(isRide); if (r) openRide(r.id); }
 // Auto-sync: every time the app opens, and when it comes back to the foreground (Android keeps PWAs alive
 // in the background, so "open" is often a resume). 2-minute floor so app-switching doesn't hammer the API.
