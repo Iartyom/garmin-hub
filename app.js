@@ -413,6 +413,8 @@ function demoStreams(a) {
 
 /* ---------- shell ---------- */
 function status(t) { $("#status").textContent = t || ""; }
+// Short haptic tick (Pixel/Android Chrome support vibrate; iPhone silently ignores it).
+const buzz = ms => { try { navigator.vibrate && navigator.vibrate(ms); } catch { } };
 function render() {
   document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === tab));
   $("#title").innerHTML = "<small>GARMIN·HUB</small>" + { today: "Today", rides: "Rides", fitness: "Fitness", sleep: "Sleep" }[tab];
@@ -449,7 +451,7 @@ function openSettings() {
 function useDemo() { db = demoData(); LS.set("gh.db", db); $("#settings").classList.remove("open"); render(); }
 document.addEventListener("click", e => {
   const t = e.target.closest("button"); if (!t) return;
-  if (t.dataset.tab) { tab = t.dataset.tab; LS.set("gh.tab", tab); window.scrollTo(0, 0); render(); }
+  if (t.dataset.tab) { buzz(8); tab = t.dataset.tab; LS.set("gh.tab", tab); window.scrollTo(0, 0); render(); }
   else if (t.dataset.ride) openRide(t.dataset.ride);
   else if (t.dataset.range) { fitRange = +t.dataset.range; render(); }
   else if (t.id === "syncBtn") db && db.demo && !cfg.key ? status("Demo mode: add your key in Settings to sync.") : sync();
@@ -470,5 +472,17 @@ if (/[?&]demo\b/.test(location.search) && (!db || db.demo)) db = demoData();
 if (/^#(today|rides|fitness|sleep)$/.test(location.hash)) tab = location.hash.slice(1);
 render();
 if (location.hash === "#ride" && db) { const r = db.acts.find(isRide); if (r) openRide(r.id); }
-if (db && !db.demo && cfg.key && Date.now() - db.at > 30 * 60e3) sync();   // auto-refresh when opened after 30+ min
+// Auto-sync: every time the app opens, and when it comes back to the foreground (Android keeps PWAs alive
+// in the background, so "open" is often a resume). 2-minute floor so app-switching doesn't hammer the API.
+let syncing = false;
+const autoSync = () => { if (cfg.key && !(db && db.demo) && !syncing && (!db || Date.now() - db.at > 2 * 60e3)) { syncing = true; sync().finally(() => syncing = false); } };
+autoSync();
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") autoSync(); });
+// Pull down from the top to force a sync (installed PWAs have no browser pull-to-refresh).
+let pullY = null;
+addEventListener("touchstart", e => { pullY = scrollY <= 0 ? e.touches[0].clientY : null; }, { passive: true });
+addEventListener("touchend", e => {
+  if (pullY != null && e.changedTouches[0].clientY - pullY > 90 && cfg.key && !(db && db.demo) && !syncing) { buzz(15); syncing = true; sync().finally(() => syncing = false); }
+  pullY = null;
+}, { passive: true });
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => { });

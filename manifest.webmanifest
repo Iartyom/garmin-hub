@@ -1,15 +1,23 @@
 {
+  "id": "./",
   "name": "Garmin Hub",
   "short_name": "Garmin Hub",
-  "description": "Personal Garmin dashboard: rides, fitness, sleep.",
+  "description": "Personal Garmin dashboard: readiness, rides, fitness, sleep.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#121212",
-  "theme_color": "#121212",
+  "orientation": "portrait",
+  "background_color": "#06080c",
+  "theme_color": "#06080c",
+  "categories": ["health", "fitness", "sports"],
   "icons": [
-    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Rides", "url": "./#rides", "icons": [{ "src": "icon-192.png", "sizes": "192x192" }] },
+    { "name": "Fitness", "url": "./#fitness", "icons": [{ "src": "icon-192.png", "sizes": "192x192" }] },
+    { "name": "Sleep", "url": "./#sleep", "icons": [{ "src": "icon-192.png", "sizes": "192x192" }] }
   ]
 }

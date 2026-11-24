@@ -7,6 +7,7 @@
 <meta name="description" content="Personal Garmin dashboard: rides, fitness, sleep, from Intervals.icu.">
 <meta name="theme-color" content="#06080c">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Garmin Hub">
 <link rel="manifest" href="manifest.webmanifest">
@@ -27,6 +28,9 @@
   --mono:"JetBrains Mono",ui-monospace,Consolas,monospace; --disp:Orbitron,"Segoe UI",system-ui,sans-serif;
 }
 *{box-sizing:border-box}
+/* no rubber-band bounce / browser pull-to-refresh: the app does its own pull-to-sync; no grey tap flash on Android */
+html{overscroll-behavior-y:none;-webkit-tap-highlight-color:transparent}
+button,nav{user-select:none;-webkit-user-select:none}
 html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
 /* faint grid + top glow, the "HUD" backdrop */
 body{padding:env(safe-area-inset-top) 0 calc(70px + env(safe-area-inset-bottom));min-height:100vh;
