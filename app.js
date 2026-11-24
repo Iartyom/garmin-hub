@@ -71,11 +71,11 @@ async function api(path) {
   return r.json();
 }
 // Keep only what the screens use: a year of full wellness objects would blow the ~5MB storage limit.
-const slimW = w => ({ d: w.id, ctl: w.ctl, atl: w.atl, rhr: w.restingHR, hrv: w.hrv, sleep: w.sleepSecs, sleepScore: w.sleepScore, steps: w.steps, vo2: w.vo2max, weight: w.weight, floors: w.floorsClimbed });   // Venu 2: no HRV, has floors
+const slimW = w => ({ d: w.id, ctl: w.ctl, atl: w.atl, rhr: w.restingHR, hrv: w.hrv, sleep: w.sleepSecs, sleepScore: w.sleepScore, sleepQ: w.sleepQuality, steps: w.steps, vo2: w.vo2max, weight: w.weight, floors: w.floorsClimbed });   // Venu 2: no HRV, has floors
 const slimA = a => ({
   id: a.id, date: a.start_date_local, type: a.type, name: a.name, dist: a.distance, time: a.moving_time,
   climb: a.total_elevation_gain, spd: a.average_speed, maxSpd: a.max_speed, hr: a.average_heartrate,
-  maxHr: a.max_heartrate, load: a.icu_training_load, zones: a.icu_hr_zone_times, drift: a.decoupling,
+  maxHr: a.max_heartrate, kcal: a.calories, load: a.icu_training_load, zones: a.icu_hr_zone_times, drift: a.decoupling,
 });
 
 async function sync() {
@@ -84,7 +84,8 @@ async function sync() {
   const now = new Date(), ath = encodeURIComponent(cfg.athlete || "0");
   const q = `oldest=${iso(addDays(now, -365))}&newest=${iso(now)}`;
   try {
-    const [w, a] = await Promise.all([api(`/athlete/${ath}/wellness?${q}`), api(`/athlete/${ath}/activities?${q}`)]);
+    const [w, a, me] = await Promise.all([api(`/athlete/${ath}/wellness?${q}`), api(`/athlete/${ath}/activities?${q}`), api(`/athlete/${ath}`).catch(() => null)]);
+    if (me && me.sex && !profile.sex) { profile.sex = /^f/i.test(me.sex) ? "f" : "m"; LS.set("gh.profile", profile); }
     db = {
       wellness: w.map(slimW).sort((x, y) => x.d.localeCompare(y.d)),
       acts: a.map(slimA).sort((x, y) => y.date.localeCompare(x.date)),
