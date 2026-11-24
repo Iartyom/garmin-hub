@@ -33,7 +33,7 @@ const WORDS = {
     week: "This week", nRides: "Quests", longest: "Longest",
     hard: "Full HP! Attack!", moderate: "Half HP. Grind.", easy: "Low HP. Rest at the inn.", calib: "Loading save..." },
   // "Beta" = climbers' word for advice on how to do a route.
-  belay: { brand: "ON BELAY", readiness: "Today's route", plan: "Beta",
+  belay: { brand: "ON BELAY", readiness: "Today's circuit", plan: "Beta",
     hard: "Climb on", moderate: "Top-rope day", easy: "Take", calib: "On belay?" },
 };
 const T = k => (WORDS[skin] && WORDS[skin][k]) || WORDS.base[k];
@@ -233,11 +233,11 @@ function renderToday(v) {
     const widget = skin === "term"
       ? `<pre class="ascii" style="--lvl:${col}" data-fill="${sc ?? 0}">${asciiBar(sc ?? 0)} ${sc == null ? "--" : sc}%<small>readiness score / 100</small></pre>`
       : skin === "belay"
-      ? topo(sc, col)
+      ? circuits(sc)
       : skin === "game"
       ? `<div style="--lvl:${col}"><div class="barhead"><span>❤ HP</span><b>${sc == null ? "??" : sc}/100</b></div><div class="bar8${R.level === "easy" ? " low" : ""}"><i data-w="${sc ?? 0}" style="width:${sc ?? 0}%"></i></div></div>`
       : ring(sc, col, R.level === "calib" ? "WAIT" : "READY");
-    const stack = skin === "term" || skin === "game";   // belay keeps the side-by-side layout (topo left, words right)
+    const stack = skin !== "synth" && skin !== "pro";   // ring skins sit side by side; bar/board widgets need full width
     h += `<div class="card"><h2>${T("readiness")} · ${short(R.last.d)}</h2><div class="verdict${stack ? " stack" : ""}">${widget}<div><h3 class="type" style="color:${col}">${T(R.level)}</h3>
       <ul>${notes.join("")}${R.flags.map(f => `<li class="flag">${esc(f)}</li>`).join("")}${R.good.map(f => `<li>${esc(f)}</li>`).join("")}</ul></div></div>
       <div class="plan"><span>${T("plan")}</span><span class="type" style="all:unset">${esc(suggestion(R.level, rides))}</span></div></div>`;
@@ -269,21 +269,15 @@ function renderToday(v) {
 }
 // 20-cell ASCII bar, filled to the score (terminal skin).
 const asciiBar = s => "[" + "█".repeat(Math.round(s / 5)) + "░".repeat(20 - Math.round(s / 5)) + "]";
-// Readiness → French sport grade (On Belay): 4 = rest day … 7a = send day.
-const GRADES = ["4", "5a", "5b", "5c", "6a", "6a+", "6b", "6b+", "6c", "7a"];
-const gradeOf = s => GRADES[Math.min(GRADES.length - 1, Math.max(0, Math.floor((s ?? 0) / 10)))];
-// Guidebook-style route topo: wavy line, bolts as ×, anchor (two rings) on top, climber dot at score height.
-// Bolts below the climber are drawn "clipped" (accent colour). x(y) is shared so the dot sits on the line.
-function topo(score, col) {
-  const H = 150, top = 16, bot = 140, xAt = y => 38 + 9 * Math.sin((bot - y) / 22);
-  let d = ""; for (let y = bot; y >= top; y -= 3) d += `${d ? "L" : "M"}${xAt(y).toFixed(1)},${y}`;
-  const s = score ?? 0, cy = bot - (bot - top) * s / 100;
-  const bolts = [124, 104, 84, 64, 44].map(y => `<g class="bolt${y >= cy ? " clipped" : ""}" data-y="${y}" transform="translate(${xAt(y).toFixed(1)},${y})"><path d="M-4,-4L4,4M4,-4L-4,4"/></g>`).join("");
-  return `<div class="topo"><svg viewBox="0 0 84 ${H}" width="100" height="${Math.round(H*100/84)}" data-score="${s}">
-    <path d="${d}" class="route"/>${bolts}
-    <g transform="translate(${xAt(top).toFixed(1)},${top - 6})" class="anchor"><circle cx="-4" r="3.2"/><circle cx="4" r="3.2"/></g>
-    <circle class="climber" r="6" cx="${xAt(cy).toFixed(1)}" cy="${cy.toFixed(1)}" fill="${col}"/></svg>
-    <div class="grade"><b>${score == null ? "–" : gradeOf(score)}</b><small>${score == null ? "" : score + "/100"}</small></div></div>`;
+// Gym Wall: readiness → the hardest colour circuit worth trying today (typical gym scale, easiest first).
+// [name, tape colour, text colour, grade written on the tape, min readiness]
+const CIRCUITS = [["Yellow", "#f2c21b", "#1c1c1c", "5a", 0], ["Green", "#2fae57", "#fff", "5c", 35], ["Blue", "#2f6fd6", "#fff", "6a+", 55],
+  ["Red", "#d63a2a", "#fff", "6b+", 70], ["Black", "#151517", "#f1efe9", "7a", 85]];
+function circuits(score) {
+  const s = score ?? 0, k = CIRCUITS.filter(c => s >= c[4]).length - 1;
+  return `<div class="circuit">${CIRCUITS.map((c, i) => [c, i]).reverse().map(([c, i]) => `<div class="ct ${i > k ? "off" : i === k ? "on" : "ok"}" style="--tc:${c[1]};--tt:${c[2]}">
+    <i class="hold"></i><span class="tape">${c[3]}</span><b>${c[0]}</b><em>${i > k ? "not today" : i === k ? "send this" : "warm-up ✓"}</em></div>`).join("")}</div>
+    <p class="cscore">Readiness ${score == null ? "–" : score}/100</p>`;
 }
 // Player One: XP from everything the watch saw, so unlogged days still level you up.
 // 1 XP per 100 steps, 5 per floor, 30 per km ridden. Level L needs 250·L·(L−1) XP total (gentle quadratic curve).
@@ -722,17 +716,6 @@ function animateIn(root) {
   root.querySelectorAll(".bar8 i[data-w]").forEach(i => {
     i.style.transition = "none"; i.style.width = "0%";
     requestAnimationFrame(() => requestAnimationFrame(() => { i.style.transition = "width 1.2s steps(16)"; i.style.width = i.dataset.w + "%"; }));
-  });
-  // On Belay: the climber climbs the route from the ground to today's score, clipping bolts on the way.
-  // Same curve as topo(): x = 38 + 9·sin((bot − y)/22).
-  root.querySelectorAll(".topo svg[data-score]").forEach(svg => {
-    const dot = svg.querySelector(".climber"), bolts = [...svg.querySelectorAll(".bolt")], top = 16, bot = 140;
-    const end = bot - (bot - top) * +svg.dataset.score / 100, t0 = performance.now(), dur = 1600;
-    bolts.forEach(b => b.classList.remove("clipped"));
-    const step = t => { const p = Math.min(1, (t - t0) / dur), e = 1 - (1 - p) ** 2, y = bot + (end - bot) * e;
-      dot.setAttribute("cy", y.toFixed(1)); dot.setAttribute("cx", (38 + 9 * Math.sin((bot - y) / 22)).toFixed(1));
-      bolts.forEach(b => b.classList.toggle("clipped", +b.dataset.y >= y)); if (p < 1) requestAnimationFrame(step); };
-    requestAnimationFrame(step);
   });
 }
 // Terminal boot screen: once per app launch, fakes a short BIOS/link sequence over the real data counts.

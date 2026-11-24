@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <!-- Fonts are decoration only: offline the app falls back to system fonts. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;800&family=JetBrains+Mono:wght@500;700&family=Audiowide&family=Press+Start+2P&family=Barlow+Condensed:wght@500;600;700&family=VT323&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;800&family=JetBrains+Mono:wght@500;700&family=Audiowide&family=Press+Start+2P&family=Barlow+Condensed:wght@500;600;700&family=Permanent+Marker&family=VT323&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
 <style>
 /* Cyber theme: one dark look on purpose (it's the app's identity). Series: cyan = slot 1, magenta = slot 2,
    picked far apart in hue AND lightness so fitness vs fatigue still separate for colour-blind eyes. */
@@ -176,43 +176,52 @@ a{color:var(--accent)}
 @keyframes bootLine{to{opacity:1}}
 @keyframes bootOut{to{opacity:0;visibility:hidden}}
 
-/* ON BELAY: guidebook / outdoor-brand look. Granite grain + faint topo contours, chalk-white text,
-   one rope-orange accent, condensed type. Readiness is a route topo (bolts ×, anchor rings, climber dot). */
+/* GYM WALL: indoor climbing gym. Sprayed charcoal panels with seams + T-nut grid, glossy resin holds,
+   masking-tape labels in marker pen, readiness = which colour circuit you can send today. */
 :root[data-skin="belay"]{
-  --acc-rgb:240,164,58; --bg:#15171a; --card:#1b1e22; --card2:#1e2126; --line:#2e3238; --ink:#ecebe6; --ink2:#b3b0a8; --muted:#7f7c75;
-  --s1:#f0a43a; --s2:#7fb4c4; --good:#9cc97f; --warn:#e9c14d; --bad:#e2694f; --accent:#f0a43a; --glow:none;
-  --disp:"Barlow Condensed","Arial Narrow",sans-serif; --mono:"Barlow Condensed","Arial Narrow",sans-serif;
+  --acc-rgb:255,196,61; --bg:#26282c; --card:rgba(24,25,28,.92); --card2:#1d1e22; --line:#3a3d43; --ink:#f1efe9; --ink2:#c4c0b6; --muted:#8d8a83;
+  --s1:#3d8bff; --s2:#ff5a45; --good:#3fbf6b; --warn:#f2c21b; --bad:#ff5a45; --accent:#ffc43d; --glow:none;
+  --disp:"Barlow Condensed","Arial Narrow",sans-serif; --mono:"Barlow Condensed","Arial Narrow",sans-serif; --marker:"Permanent Marker",cursive;
 }
 :root[data-skin="belay"] body{font-family:Inter,system-ui,sans-serif;background:
-  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .06 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
-  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='720' height='720'%3E%3Cg fill='none' stroke='%23ecebe6' stroke-opacity='.045' stroke-width='1.2'%3E%3Cpath d='M360 120c120 10 230 90 240 220s-80 250-230 260-260-70-270-210 140-280 260-270z'/%3E%3Cpath d='M362 170c95 8 185 75 190 175s-65 200-185 208-205-55-212-168 112-223 207-215z'/%3E%3Cpath d='M365 222c70 6 135 55 140 128s-48 148-136 154-150-40-155-123 82-165 151-159z'/%3E%3Cpath d='M368 275c45 4 88 36 90 83s-31 95-88 99-97-26-100-80 53-106 98-102z'/%3E%3Cpath d='M370 322c22 2 42 18 44 41s-15 46-43 48-47-13-49-39 26-52 48-50z'/%3E%3Cpath d='M40 40c90 30 120 120 60 190S-40 300 -60 230'/%3E%3Cpath d='M690 520c-60 40-80 120-20 170'/%3E%3C/g%3E%3C/svg%3E") 0 0/720px 720px,
-  var(--bg);background-attachment:fixed}
-:root[data-skin="belay"] .card{border-radius:6px;background:linear-gradient(180deg,rgba(255,255,255,.025),transparent 40%),var(--card);box-shadow:0 1px 0 rgba(255,255,255,.04) inset,0 8px 24px rgba(0,0,0,.35)}
+  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='420' height='420'%3E%3Cdefs%3E%3CradialGradient id='g0' cx='.38' cy='.3' r='.85'%3E%3Cstop offset='0' stop-color='%23ff9b8a'/%3E%3Cstop offset='.5' stop-color='%23d63a2a'/%3E%3Cstop offset='1' stop-color='%236e1810'/%3E%3C/radialGradient%3E%3CradialGradient id='g1' cx='.38' cy='.3' r='.85'%3E%3Cstop offset='0' stop-color='%238fc2ff'/%3E%3Cstop offset='.5' stop-color='%232f6fd6'/%3E%3Cstop offset='1' stop-color='%2313306a'/%3E%3C/radialGradient%3E%3CradialGradient id='g2' cx='.38' cy='.3' r='.85'%3E%3Cstop offset='0' stop-color='%23fff1a0'/%3E%3Cstop offset='.5' stop-color='%23f2c21b'/%3E%3Cstop offset='1' stop-color='%238a6a00'/%3E%3C/radialGradient%3E%3CradialGradient id='g3' cx='.38' cy='.3' r='.85'%3E%3Cstop offset='0' stop-color='%23a8f0b8'/%3E%3Cstop offset='.5' stop-color='%232fae57'/%3E%3Cstop offset='1' stop-color='%23105a26'/%3E%3C/radialGradient%3E%3CradialGradient id='g4' cx='.38' cy='.3' r='.85'%3E%3Cstop offset='0' stop-color='%23e0b8ff'/%3E%3Cstop offset='.5' stop-color='%238b46d4'/%3E%3Cstop offset='1' stop-color='%233e176a'/%3E%3C/radialGradient%3E%3C/defs%3E%3Cpath d='M38 70c6-30 52-44 82-28 24 13 22 46-6 60-30 15-82 4-76-32z' fill='%23000' opacity='.45' transform='translate(5 8)'/%3E%3Cpath d='M38 70c6-30 52-44 82-28 24 13 22 46-6 60-30 15-82 4-76-32z' fill='url(%23g0)'/%3E%3Ccircle cx='78' cy='68' r='6.5' fill='%231a1a1a' opacity='.85'/%3E%3Ccircle cx='78' cy='68' r='4.5' fill='%239a9a9a'/%3E%3Ccircle cx='78' cy='68' r='2.2' fill='%23222'/%3E%3Cpath d='M318 136c10-16 44-20 60-6 12 11 4 30-14 34-22 5-56-10-46-28z' fill='%23000' opacity='.45' transform='translate(5 8)'/%3E%3Cpath d='M318 136c10-16 44-20 60-6 12 11 4 30-14 34-22 5-56-10-46-28z' fill='url(%23g1)'/%3E%3Ccircle cx='350' cy='146' r='6.5' fill='%231a1a1a' opacity='.85'/%3E%3Ccircle cx='350' cy='146' r='4.5' fill='%239a9a9a'/%3E%3Ccircle cx='350' cy='146' r='2.2' fill='%23222'/%3E%3Cpath d='M72 318c-4-22 18-40 44-38 22 2 34 20 26 36-10 20-66 24-70 2z' fill='%23000' opacity='.45' transform='translate(5 8)'/%3E%3Cpath d='M72 318c-4-22 18-40 44-38 22 2 34 20 26 36-10 20-66 24-70 2z' fill='url(%23g2)'/%3E%3Ccircle cx='104' cy='304' r='6.5' fill='%231a1a1a' opacity='.85'/%3E%3Ccircle cx='104' cy='304' r='4.5' fill='%239a9a9a'/%3E%3Ccircle cx='104' cy='304' r='2.2' fill='%23222'/%3E%3Cpath d='M300 330l30-22 40 6 16 24-18 20-50 4-22-14z' fill='%23000' opacity='.45' transform='translate(5 8)'/%3E%3Cpath d='M300 330l30-22 40 6 16 24-18 20-50 4-22-14z' fill='url(%23g3)'/%3E%3Ccircle cx='340' cy='340' r='6.5' fill='%231a1a1a' opacity='.85'/%3E%3Ccircle cx='340' cy='340' r='4.5' fill='%239a9a9a'/%3E%3Ccircle cx='340' cy='340' r='2.2' fill='%23222'/%3E%3Cpath d='M196 214c4-8 34-10 44-2 6 5 0 12-10 13-18 2-38-2-34-11z' fill='%23000' opacity='.45' transform='translate(5 8)'/%3E%3Cpath d='M196 214c4-8 34-10 44-2 6 5 0 12-10 13-18 2-38-2-34-11z' fill='url(%23g4)'/%3E%3Ccircle cx='218' cy='216' r='6.5' fill='%231a1a1a' opacity='.85'/%3E%3Ccircle cx='218' cy='216' r='4.5' fill='%239a9a9a'/%3E%3Ccircle cx='218' cy='216' r='2.2' fill='%23222'/%3E%3Cpath d='M150 22c8-10 30-10 36 0 4 8-6 16-18 16s-24-8-18-16z' fill='%23000' opacity='.45' transform='translate(5 8)'/%3E%3Cpath d='M150 22c8-10 30-10 36 0 4 8-6 16-18 16s-24-8-18-16z' fill='url(%23g1)'/%3E%3Ccircle cx='168' cy='24' r='6.5' fill='%231a1a1a' opacity='.85'/%3E%3Ccircle cx='168' cy='24' r='4.5' fill='%239a9a9a'/%3E%3Ccircle cx='168' cy='24' r='2.2' fill='%23222'/%3E%3C/svg%3E") 0 0/420px 420px,
+  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .07 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+  radial-gradient(circle at 20px 20px,#0c0d0f 0 2.6px,#3a3c41 3.2px,transparent 4px) 0 0/40px 40px,
+  linear-gradient(90deg,rgba(0,0,0,.55) 0 2px,transparent 2px) 0 0/240px 100%,
+  linear-gradient(rgba(0,0,0,.55) 0 2px,transparent 2px) 0 0/100% 240px,
+  linear-gradient(160deg,#2d3035,#222428 60%,#1d1f22);background-attachment:fixed}
+:root[data-skin="belay"] .card{border:1px solid rgba(255,255,255,.06);border-radius:10px;background:var(--card);backdrop-filter:blur(2px);box-shadow:0 10px 30px rgba(0,0,0,.45)}
 :root[data-skin="belay"] .card::before,:root[data-skin="belay"] .card::after{display:none}
-/* section titles: small bolt-hanger icon + condensed caps, like guidebook headers */
-:root[data-skin="belay"] .card h2{font:600 15px/1 "Barlow Condensed",sans-serif;letter-spacing:.14em;color:var(--ink2);display:flex;align-items:center;gap:8px}
-:root[data-skin="belay"] .card h2::before{content:"";width:11px;height:15px;flex:none;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 11 15'%3E%3Crect x='1' y='1' width='9' height='13' rx='4.5' fill='none' stroke='%23b3b0a8' stroke-width='1.4'/%3E%3Ccircle cx='5.5' cy='5' r='1.6' fill='%23b3b0a8'/%3E%3Cellipse cx='5.5' cy='10.2' rx='2.3' ry='1.9' fill='none' stroke='%23b3b0a8' stroke-width='1.2'/%3E%3C/svg%3E") no-repeat center/contain}
-:root[data-skin="belay"] header h1{font:700 30px/1 "Barlow Condensed",sans-serif;letter-spacing:.06em}
-:root[data-skin="belay"] header h1 small{font:600 11px Inter,sans-serif;letter-spacing:.32em;color:var(--accent)}
-:root[data-skin="belay"] .tile{background:rgba(255,255,255,.025);border:0;border-top:2px solid var(--line);border-radius:3px}
-:root[data-skin="belay"] .tile span{font:600 11px "Barlow Condensed",sans-serif;letter-spacing:.12em}
-:root[data-skin="belay"] .tile b{font:600 27px/1.1 "Barlow Condensed",sans-serif;letter-spacing:.01em}
+/* card titles = strip of masking tape with marker writing, like a setter's route label */
+:root[data-skin="belay"] .card h2{display:inline-block;font:400 17px/1 var(--marker);letter-spacing:.02em;text-transform:none;color:#1c1c1c;
+  background:linear-gradient(180deg,#efe9d6,#ddd5bd);padding:6px 14px 5px;margin:-2px 0 14px -4px;transform:rotate(-1.2deg);
+  clip-path:polygon(0 12%,2% 0,30% 6%,60% 0,98% 5%,100% 0,99% 52%,100% 100%,70% 94%,40% 100%,2% 95%,0 100%,1.5% 50%);box-shadow:0 2px 3px rgba(0,0,0,.4)}
+:root[data-skin="belay"] header h1{font:700 32px/1 var(--disp);letter-spacing:.04em}
+:root[data-skin="belay"] header h1 small{font:400 13px var(--marker);letter-spacing:.06em;color:var(--accent);text-transform:none}
+:root[data-skin="belay"] .tile{background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.05);border-radius:8px}
+:root[data-skin="belay"] .tile span{font:600 11px var(--disp);letter-spacing:.12em}
+:root[data-skin="belay"] .tile b{font:600 28px/1.1 var(--disp)}
 :root[data-skin="belay"] .tile small{font-family:Inter,sans-serif}
-:root[data-skin="belay"] .verdict h3{font:700 28px/1 "Barlow Condensed",sans-serif;letter-spacing:.04em}
-:root[data-skin="belay"] .plan{border:0;border-left:2px solid var(--accent);border-radius:0;background:rgba(240,164,58,.05)}
-:root[data-skin="belay"] .plan span:first-child{font:600 12px "Barlow Condensed",sans-serif;letter-spacing:.18em}
-:root[data-skin="belay"] nav{background:rgba(21,23,26,.95)}
-:root[data-skin="belay"] nav button{font:600 11px "Barlow Condensed",sans-serif;letter-spacing:.14em}
-/* the topo widget */
-.topo{flex:none;display:flex;align-items:flex-start;gap:4px}
-.topo .route{fill:none;stroke:var(--ink2);stroke-width:1.6;stroke-dasharray:3 3}
-.topo .bolt path{stroke:var(--muted);stroke-width:1.8;stroke-linecap:round;transition:stroke .2s}
-.topo .bolt.clipped path{stroke:var(--accent)}
-.topo .anchor circle{fill:none;stroke:var(--ink);stroke-width:1.6}
-.topo .climber{stroke:var(--card);stroke-width:2.5}
-.topo .grade{padding-top:2px}
-.topo .grade b{display:block;font:700 34px/1 "Barlow Condensed",sans-serif;color:var(--ink)}
-.topo .grade small{font:500 11px Inter,sans-serif;color:var(--muted)}
+:root[data-skin="belay"] .verdict h3{font:400 26px/1.1 var(--marker);text-transform:none;letter-spacing:.01em}
+:root[data-skin="belay"] .plan{border:0;border-left:3px solid var(--accent);border-radius:0 6px 6px 0;background:rgba(255,196,61,.06)}
+:root[data-skin="belay"] .plan span:first-child{font:400 14px var(--marker);letter-spacing:.02em;text-transform:none}
+:root[data-skin="belay"] .legs span{font:400 13px var(--marker);letter-spacing:.02em;text-transform:none}
+:root[data-skin="belay"] nav{background:rgba(22,23,26,.96)}
+:root[data-skin="belay"] nav button{font:600 11px var(--disp);letter-spacing:.14em}
+/* circuit board: one row per colour circuit, hardest on top, like the grade chart at the gym entrance */
+:root[data-skin="belay"] .card h2::before{content:none}
+.circuit{display:grid;gap:6px;margin-bottom:12px}
+.ct{display:grid;grid-template-columns:22px 70px 1fr auto;align-items:center;gap:10px;padding:6px 10px;border-radius:8px;border:1px solid transparent}
+.ct .hold{width:22px;height:18px;border-radius:48% 52% 44% 56%/60% 55% 45% 40%;background:radial-gradient(circle at 35% 30%,rgba(255,255,255,.55),var(--tc) 45%,rgba(0,0,0,.55) 120%);box-shadow:2px 3px 0 rgba(0,0,0,.45)}
+.ct .tape{font:400 17px/1 "Permanent Marker",cursive;color:var(--tt);background:var(--tc);padding:4px 8px 3px;text-align:center;transform:rotate(-2deg);
+  clip-path:polygon(0 10%,3% 0,97% 6%,100% 0,98% 50%,100% 100%,3% 94%,0 100%,2% 50%)}
+.ct b{font:600 16px "Barlow Condensed",sans-serif;letter-spacing:.06em;text-transform:uppercase}
+.ct em{font:400 13px "Permanent Marker",cursive;font-style:normal;color:var(--muted)}
+.ct.off{opacity:.32}
+.ct.ok em{color:var(--good)}
+.ct.on{border-color:var(--tc);background:rgba(255,255,255,.05)}
+.ct.on em{color:var(--ink)}
+.cscore{font:500 12px Inter,sans-serif;color:var(--muted);margin:-4px 0 10px}
 
 /* PLAYER ONE: 16-bit RPG. Navy night, gold UI, pixel boxes, HP/XP bars */
 :root[data-skin="game"]{
@@ -347,14 +356,16 @@ main .card:nth-child(2){animation-delay:.06s} main .card:nth-child(3){animation-
   .bar8.low i{animation:blinkHp .8s steps(1) infinite}
   @keyframes blinkHp{50%{opacity:.35}}
 
-  /* ON BELAY: faint chalk dust drifting up through the screen (two slow layers) */
-  :root[data-skin="belay"] body::before,:root[data-skin="belay"] body::after{content:"";position:fixed;inset:-20% 0 0;pointer-events:none;z-index:0;
-    background:radial-gradient(rgba(236,235,230,.22) 0 1px,transparent 2px) 0 0/83px 97px,radial-gradient(rgba(236,235,230,.12) 0 1.5px,transparent 2.5px) 30px 40px/149px 131px;
-    animation:chalkDrift 26s linear infinite;filter:blur(.4px)}
-  :root[data-skin="belay"] body::after{background-size:113px 89px,197px 173px;animation-duration:41s;opacity:.7}
-  @keyframes chalkDrift{to{transform:translateY(-20%)}}
-  :root[data-skin="belay"] header,:root[data-skin="belay"] main{position:relative;z-index:1}
-  :root[data-skin="belay"] .card{animation:lift .55s cubic-bezier(.2,.8,.2,1) both}
+  /* GYM WALL: tape labels stick on one after another; today's circuit gets a chalk puff */
+  :root[data-skin="belay"] .card h2{animation:stick .35s cubic-bezier(.3,1.6,.5,1) both}
+  .ct{animation:stick .4s cubic-bezier(.3,1.6,.5,1) both}
+  .ct:nth-child(2){animation-delay:.08s}.ct:nth-child(3){animation-delay:.16s}.ct:nth-child(4){animation-delay:.24s}.ct:nth-child(5){animation-delay:.32s}
+  @keyframes stick{from{opacity:0;transform:scale(1.15) rotate(-4deg)}}
+  .ct.on{position:relative}
+  .ct.on::after{content:"";position:absolute;left:-10px;top:50%;width:60px;height:60px;margin-top:-30px;border-radius:50%;pointer-events:none;
+    background:radial-gradient(rgba(255,255,255,.55),transparent 65%);animation:puff 1.2s ease-out .6s both}
+  @keyframes puff{0%{opacity:0;transform:scale(.3)}25%{opacity:1}100%{opacity:0;transform:scale(2.4)}}
+  :root[data-skin="belay"] .card{animation:lift .5s cubic-bezier(.2,.8,.2,1) both}
 
   /* PRO: calm. Cards lift in, a soft pulse on the readiness ring, nothing in the background */
   :root[data-skin="pro"] .card{animation:lift .5s cubic-bezier(.2,.8,.2,1) both}
@@ -420,7 +431,7 @@ main .card:nth-child(2){animation-delay:.06s} main .card:nth-child(3){animation-
       <h2>Look</h2>
       <div class="skins">
         <button data-skin="term">Terminal</button><button data-skin="game">Player One</button>
-        <button data-skin="belay">On Belay</button><button data-skin="synth">Synthwave</button>
+        <button data-skin="belay">Gym Wall</button><button data-skin="synth">Synthwave</button>
         <button data-skin="pro">Pro (light)</button>
       </div>
     </div>
