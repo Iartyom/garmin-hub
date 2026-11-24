@@ -117,7 +117,7 @@ function deriveLoad(d) {
   const by = {}; d.acts.forEach(a => { const day = a.date.slice(0, 10); by[day] = (by[day] || 0) + (a.load || 0); });
   let ctl = 0, atl = 0; d.wellness.forEach(w => { const l = by[w.d] || 0; ctl += (l - ctl) / 42; atl += (l - atl) / 7; w.ctl = ctl; w.atl = atl; });
 }
-const APP_VER = "v18";   // keep in step with CACHE in sw.js; shown after sync so it's obvious which build the phone runs
+const APP_VER = "v19";   // keep in step with CACHE in sw.js; shown after sync so it's obvious which build the phone runs
 async function sync() {
   if (!cfg.key) { openSettings(); return; }
   status("Syncing…");
@@ -290,7 +290,7 @@ function renderToday(v) {
       ? `<div style="--lvl:${col}"><div class="barhead"><span>❤ HP</span><b>${sc == null ? "??" : sc}/100</b></div><div class="bar8${R.level === "easy" ? " low" : ""}"><i data-w="${sc ?? 0}" style="width:${sc ?? 0}%"></i></div></div>`
       : ring(sc, col, R.level === "calib" ? "WAIT" : "READY");
     const stack = skin !== "synth" && skin !== "pro";   // ring skins sit side by side; bar/board widgets need full width
-    h += `<div class="card"><h2>${T("readiness")} · ${short(R.last.d)}</h2><div class="verdict${stack ? " stack" : ""}">${widget}<div><h3 class="type" style="color:${col}">${T(R.level)}</h3>
+    h += `<div class="card"><h2>${T("readiness")} · ${R.last.d === iso(new Date()) ? "this morning" : short(R.last.d)}</h2><div class="verdict${stack ? " stack" : ""}">${widget}<div><h3 class="type" style="color:${col}">${T(R.level)}</h3>
       ${R.drivers && R.drivers.length ? `<p class="muted" style="margin:2px 0 0">${(() => { const w = [...R.drivers].sort((a, b) => a[1] - b[1])[0]; return R.flags.length ? esc(R.flags[0]) : w && w[1] < -3 ? `Main drag: ${esc(w[0].toLowerCase())}` : "Nothing pulling you down."; })()}</p>` : `<ul>${notes.join("")}${R.flags.map(f => `<li class="flag">${esc(f)}</li>`).join("")}${R.good.map(f => `<li>${esc(f)}</li>`).join("")}</ul>`}</div></div>
       ${R.drivers && R.drivers.length ? driversHtml(R.drivers) : ""}
       ${commute.days.includes(new Date().getDay()) ? "" : `<div class="plan"><span>${T("plan")}</span><span class="type" style="all:unset">${esc(suggestion(R.level, rides))}</span></div>`}</div>`;
