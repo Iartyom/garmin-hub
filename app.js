@@ -18,11 +18,11 @@ let tab = LS.get("gh.tab", "today");
 const SKIN_BAR = { term: "#0b0d10", game: "#0b0d26", synth: "#0a0218", pro: "#f2f3f5" };
 // Per-skin vocabulary: the same screen speaks plain English, shell or RPG. Missing keys fall back to base.
 const WORDS = {
-  base: { brand: "GARMIN·HUB", today: "Today", rides: "Rides", fitness: "Fitness", sleep: "Sleep",
+  base: { brand: "GARMIN·HUB", today: "Today", rides: "Workouts", fitness: "Fitness", sleep: "Sleep",
     readiness: "Readiness", plan: "Today's plan", engine: "Engine", riding: "Riding", vo2: "VO2max", rhr: "Resting HR", steps: "Steps/day",
     night: "Last night", sleepAvg: "Sleep avg", floors: "Floors", week: "This week", nRides: "Rides", longest: "Longest",
     hard: "Go hard", moderate: "Moderate", easy: "Take it easy", calib: "Calibrating" },
-  term: { brand: "user@garmin-hub:~$", today: "./today", rides: "./rides", fitness: "./fitness", sleep: "./sleep",
+  term: { brand: "user@garmin-hub:~$", today: "./today", rides: "./workouts", fitness: "./fitness", sleep: "./sleep",
     readiness: "readiness --today", plan: "suggested_cmd", engine: "engine --from-body", riding: "rides --summary",
     vo2: "vo2max", rhr: "rest_hr", steps: "steps/day", night: "sleep_last", sleepAvg: "sleep_avg", floors: "floors",
     week: "this_week", nRides: "rides", longest: "longest",
@@ -52,10 +52,17 @@ const daysAgo = s => Math.round((parseDay(iso(new Date())) - parseDay(s)) / 864e
 const short = s => parseDay(s).toLocaleDateString(undefined, { day: "numeric", month: "short" });
 const dayName = s => parseDay(s).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
 const km = m => m == null ? "–" : (m / 1000).toFixed(1);
+const pace = ms => { if (!ms) return "–"; const sec = 1000 / ms; return `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, "0")}`; };
 const kmh = ms => ms == null ? "–" : (ms * 3.6).toFixed(1);
 const hm = s => { if (s == null) return "–"; const h = Math.floor(s / 3600), m = Math.round(s % 3600 / 60); return h ? `${h}h ${String(m).padStart(2, "0")}m` : `${m}m`; };
 const r0 = v => v == null || isNaN(v) ? "–" : Math.round(v);
 const isRide = a => /Ride/i.test(a.type || "");
+// Workout families. Intervals passes Garmin's sport type through (Ride, VirtualRide, Run, TrailRun, WeightTraining, Walk, Hike, RockClimbing…).
+const KINDS = [["ride", "Ride", /Ride|Cycl|Bike/i], ["run", "Run", /Run/i], ["gym", "Strength", /Weight|Strength|Crossfit|HIIT|Workout|Training|Yoga|Pilates/i],
+  ["climb", "Climb", /Climb|Boulder/i], ["walk", "Walk", /Walk|Hike/i], ["swim", "Swim", /Swim/i]];
+const kindOf = a => (KINDS.find(k => k[2].test(a.type || "")) || ["other", "Other"])[0];
+const kindName = k => (KINDS.find(x => x[0] === k) || [k, "Other"])[1];
+let wkFilter = "all";
 const mean = a => a.length ? a.reduce((s, x) => s + x, 0) / a.length : null;
 const sd = a => { const m = mean(a); return a.length > 1 ? Math.sqrt(a.reduce((s, x) => s + (x - m) ** 2, 0) / (a.length - 1)) : 0; };
 
@@ -416,17 +423,38 @@ function saveCommute() {
 const rideButton = a => `<button class="ride" data-ride="${esc(a.id)}"><div class="row"><span class="t">${esc(a.name || a.type)}</span><span class="muted">${dayName(a.date)}</span></div>
   <div class="m">${km(a.dist)} km · ${hm(a.time)} · ${kmh(a.spd)} km/h · ↑${r0(a.climb)} m${a.hr ? ` · ♥ ${r0(a.hr)}` : ""}${a.drift != null ? ` · drift ${a.drift.toFixed(1)}%` : ""}</div></button>`;
 function weekStart(s) { const d = parseDay(s); d.setDate(d.getDate() - (d.getDay() + 6) % 7); return iso(d); }
+// Workouts tab: every activity type. Chips filter by family; the weekly chart shows training TIME (distance means
+// nothing for gym or climbing). With Garmin extras, the week's intensity minutes are shown next to logged time, so
+// unlogged sessions are visible.
+function workoutButton(a) {
+  const k = kindOf(a), gps = a.dist > 50;
+  const meta = [gps ? `${km(a.dist)} km` : null, hm(a.time), gps && k === "ride" ? `${kmh(a.spd)} km/h` : null,
+    gps && k === "run" && a.spd ? `${pace(a.spd)} /km` : null, a.climb > 5 ? `↑${r0(a.climb)} m` : null,
+    a.hr ? `♥ ${r0(a.hr)}` : null, !gps && a.kcal ? `${r0(a.kcal)} kcal` : null].filter(Boolean).join(" · ");
+  return `<button class="ride" data-ride="${esc(a.id)}"><div class="row"><span class="t"><span class="kind k-${k}">${kindName(k)}</span> ${esc(a.name || a.type)}</span><span class="muted">${dayName(a.date)}</span></div>
+    <div class="m">${meta}</div></button>`;
+}
 function renderRides(v) {
-  const rides = db.acts.filter(isRide);
-  // Weekly distance, last 12 weeks, Monday-based; empty weeks stay as gaps of zero.
+  const all = db.acts, present = KINDS.map(k => k[0]).filter(k => all.some(a => kindOf(a) === k)).concat(all.some(a => kindOf(a) === "other") ? ["other"] : []);
+  if (wkFilter !== "all" && !present.includes(wkFilter)) wkFilter = "all";
+  const list = wkFilter === "all" ? all : all.filter(a => kindOf(a) === wkFilter);
   const wk = [], mon = weekStart(iso(new Date()));
   for (let k = 11; k >= 0; k--) wk.push(iso(addDays(parseDay(mon), -7 * k)));
-  const kmBy = Object.fromEntries(wk.map(w => [w, 0]));
-  rides.forEach(a => { const w = weekStart(a.date); if (w in kmBy) kmBy[w] += (a.dist || 0) / 1000; });
-  const thisWeek = kmBy[mon], avg = mean(wk.slice(0, -1).map(w => kmBy[w]));
-  v.innerHTML = `<div class="card"><h2>Weekly distance</h2><p class="muted" style="margin:0 0 6px">This week ${thisWeek.toFixed(0)} km · 11-week average ${avg.toFixed(0)} km</p><div id="wkChart"></div></div>
-    <div class="card"><h2>Rides (${rides.length} in the last year)</h2>${rides.slice(0, 60).map(rideButton).join("") || `<p class="muted">No rides synced yet.</p>`}</div>`;
-  barChart($("#wkChart"), { x: wk, values: wk.map(w => kmBy[w]), color: css("--s1"), label: "Distance", fmt: v => r0(v), tipFmt: v => v.toFixed(1) + " km",
+  const minBy = Object.fromEntries(wk.map(w => [w, 0]));
+  list.forEach(a => { const w = weekStart(a.date); if (w in minBy) minBy[w] += (a.time || 0) / 60; });
+  const thisWeek = minBy[mon], avg = mean(wk.slice(0, -1).map(w => minBy[w]));
+  const nWeek = list.filter(a => weekStart(a.date) === mon).length;
+  const im = db.garmin ? imWeek() : null;
+  // same window as imWeek(): last 7 days, all workouts regardless of filter
+  const log7 = all.filter(a => daysAgo(a.date.slice(0, 10)) <= 6).reduce((t, a) => t + (a.time || 0) / 60, 0);
+  const kmW = list.filter(a => weekStart(a.date) === mon).reduce((t, a) => t + (a.dist || 0), 0);
+  v.innerHTML = `<div class="chips">${["all", ...present].map(k => `<button data-wk="${k}" class="${k === wkFilter ? "on" : ""}">${k === "all" ? "All" : kindName(k)} <small>${k === "all" ? all.length : all.filter(a => kindOf(a) === k).length}</small></button>`).join("")}</div>
+    <div class="card"><h2>Training time per week</h2>
+      <p class="muted" style="margin:0 0 6px">This week ${hm(thisWeek * 60)} · ${nWeek} session${nWeek === 1 ? "" : "s"}${kmW ? ` · ${km(kmW)} km` : ""} · 11-week average ${hm(avg * 60)}</p>
+      <div id="wkChart"></div>
+      ${im != null ? `<p class="note">Garmin counted <b>${im} intensity min</b> in the last 7 days. You logged ${r0(log7)} min. ${im > log7 + 30 ? "The gap is training that wasn't recorded as an activity." : "That roughly matches."}</p>` : ""}</div>
+    <div class="card"><h2>${wkFilter === "all" ? "All workouts" : kindName(wkFilter)} (${list.length} in the last year)</h2>${list.slice(0, 80).map(workoutButton).join("") || `<p class="muted">Nothing synced yet. Start an activity on the watch and it shows up here after Garmin Connect syncs.</p>`}</div>`;
+  barChart($("#wkChart"), { x: wk, values: wk.map(w => minBy[w]), color: css("--s1"), label: "Time", fmt: v => v >= 60 ? (v / 60).toFixed(v >= 600 ? 0 : 1) + "h" : r0(v) + "m", tipFmt: v => hm(v * 60),
     xLabel: w => short(w), tipLabel: w => "Week of " + short(w) });
 }
 // Aerobic decoupling from the streams: speed-per-heartbeat in the first vs second half of moving time.
@@ -445,12 +473,13 @@ async function openRide(id) {
   $("#rideTitle").textContent = a.name || a.type;
   const body = $("#rideBody"); $("#rideSheet").classList.add("open");
   const tile = (val, lab) => `<div class="tile"><span>${lab}</span><b>${val}</b></div>`;
+  const gps = a.dist > 50;   // indoor/gym sessions: no map, speed or distance
   body.innerHTML = `<p class="muted">${dayName(a.date)} · ${new Date(a.date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p>
-    <div id="map"></div>
-    <div class="card"><div class="tiles">${tile(km(a.dist), "km")}${tile(hm(a.time), "Moving")}${tile(kmh(a.spd), "Avg km/h")}
-      ${tile(kmh(a.maxSpd), "Max km/h")}${tile(r0(a.climb), "Climb m")}${tile(r0(a.hr), "Avg HR")}${tile(r0(a.maxHr), "Max HR")}${tile(r0(a.load), "Load")}<div class="tile" id="driftTile"><span>HR drift</span><b>…</b></div></div></div>
+    ${gps ? `<div id="map"></div>` : ""}
+    <div class="card"><div class="tiles">${gps ? tile(km(a.dist), "km") : ""}${tile(hm(a.time), "Moving")}${gps ? (kindOf(a) === "run" ? tile(pace(a.spd), "Pace /km") : tile(kmh(a.spd), "Avg km/h")) : ""}
+      ${gps ? tile(kmh(a.maxSpd), "Max km/h") : ""}${gps ? tile(r0(a.climb), "Climb m") : ""}${tile(r0(a.hr), "Avg HR")}${tile(r0(a.maxHr), "Max HR")}${a.kcal ? tile(r0(a.kcal), "kcal") : ""}${tile(r0(a.load), "Load")}${gps ? `<div class="tile" id="driftTile"><span>HR drift</span><b>…</b></div>` : ""}</div></div>
     <div class="card"><h2>Heart rate</h2><div id="hrC"></div></div>
-    <div class="card"><h2>Speed (km/h)</h2><div id="spC"></div></div>
+    ${gps ? `<div class="card"><h2>Speed (km/h)</h2><div id="spC"></div></div>` : ""}
     <div class="card zones"><h2>Time in HR zones</h2><div id="zC"></div></div>`;
   if (a.zones && a.zones.length) {
     const tot = a.zones.reduce((s, x) => s + x, 0) || 1, mx = Math.max(...a.zones);
@@ -459,7 +488,7 @@ async function openRide(id) {
   let s;
   try { s = await streams(a); } catch (e) { $("#hrC").innerHTML = `<p class="muted">${esc(e.message)}</p>`; return; }
   const dr = a.drift != null ? a.drift : driftOf(s);
-  $("#driftTile").innerHTML = `<span>HR drift</span><b>${dr == null ? "–" : dr.toFixed(1) + "%"}</b><small>${dr == null ? "" : dr < 5 ? "steady" : dr < 10 ? "some fade" : "big fade"}</small>`;
+  if ($("#driftTile")) $("#driftTile").innerHTML = `<span>HR drift</span><b>${dr == null ? "–" : dr.toFixed(1) + "%"}</b><small>${dr == null ? "" : dr < 5 ? "steady" : dr < 10 ? "some fade" : "big fade"}</small>`;
   // Charts are indexed by time; labels show the ride date (single day), so use elapsed minutes in the tooltip.
   const t = down(s.time || (s.heartrate || []).map((_, i) => i));
   const mins = v => Math.round(v / 60) + " min";
@@ -471,8 +500,8 @@ async function openRide(id) {
     [0, Math.floor((t.length - 1) / 2), t.length - 1].forEach((i, k) => xl[k] && (xl[k].textContent = mins(t[i])));
   };
   asLine($("#hrC"), s.heartrate, "Heart rate", css("--bad"), v => r0(v) + " bpm");
-  asLine($("#spC"), s.velocity_smooth && s.velocity_smooth.map(x => x * 3.6), "Speed", css("--s1"), v => v.toFixed(1) + " km/h");
-  drawMap(s.latlng);
+  if (gps) asLine($("#spC"), s.velocity_smooth && s.velocity_smooth.map(x => x * 3.6), "Speed", css("--s1"), v => v.toFixed(1) + " km/h");
+  if (gps) drawMap(s.latlng);
 }
 let leafletP;
 function loadLeaflet() {
@@ -693,6 +722,13 @@ function demoData() {
     ctl += (load - ctl) / 42; atl += (load - atl) / 7;
     W.push({ d, ctl, atl, rhr: Math.round(52 + R() * 6 + (atl - ctl) / 6), hrv: Math.round(62 + R() * 16 - (atl - ctl) / 3), sleep: (5.4 + R() * 3) * 3600, sleepScore: Math.round(60 + R() * 35), steps: Math.round(5000 + R() * 9000), vo2: k % 7 ? null : 46 + (365 - k) / 120, weight: null });
   }
+  const R3 = rng(99);
+  for (let k = 0; k < 40; k++) { const d = iso(new Date(Date.now() - (k * 4 + 1) * 864e5)), t = ["Run", "WeightTraining", "Walk", "RockClimbing"][k % 4];
+    const time = { Run: 1800 + R3() * 1500, WeightTraining: 2700 + R3() * 1200, Walk: 2400 + R3() * 1800, RockClimbing: 4200 + R3() * 1800 }[t];
+    A.push({ id: "d" + t + k, date: d + "T18:10:00", type: t, name: { Run: "Evening run", WeightTraining: "Gym", Walk: "Walk", RockClimbing: "Top rope session" }[t], time,
+      dist: t === "Run" ? time * (2.7 + R3() * .4) : t === "Walk" ? time * 1.4 : 0, spd: t === "Run" ? 2.8 + R3() * .4 : t === "Walk" ? 1.4 : 0, climb: t === "Run" ? 40 : 0,
+      hr: { Run: 152, WeightTraining: 112, Walk: 98, RockClimbing: 121 }[t] + R3() * 8, maxHr: 175, kcal: time / 60 * (t === "Run" ? 11 : 6), load: time / 60 * (t === "Run" ? 1.1 : .5), zones: [] }); }
+  A.sort((x, y) => x.date.localeCompare(y.date));
   const garmin = W.map((w, k) => { const R2 = rng(k + 7), bed = Date.parse(w.d + "T00:00:00Z") - (60 + R2() * 90) * 6e4;
     return { d: w.d, bbWake: Math.round(45 + R2() * 50), bbHigh: 100, bbLow: Math.round(5 + R2() * 25), stress: Math.round(18 + R2() * 25),
       imMod: Math.round(R2() * 40), imVig: Math.round(R2() * 15), deep: 3600 + R2() * 2400, light: 12000 + R2() * 4000, rem: 4200 + R2() * 2400, awake: 600 + R2() * 1200,
@@ -779,6 +815,7 @@ document.addEventListener("click", e => {
   const t = e.target.closest("button"); if (!t) return;
   if (t.dataset.tab) { buzz(8); tab = t.dataset.tab; LS.set("gh.tab", tab); window.scrollTo(0, 0); render(); }
   else if (t.dataset.ride) openRide(t.dataset.ride);
+  else if (t.dataset.wk) { wkFilter = t.dataset.wk; buzz(6); render(); }
   else if (t.dataset.range) { fitRange = +t.dataset.range; render(); }
   else if (t.id === "syncBtn") db && db.demo && !cfg.key ? status("Demo mode: add your key in Settings to sync.") : sync();
   else if (t.id === "setBtn" || t.id === "goSet") openSettings();

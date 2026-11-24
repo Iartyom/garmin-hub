@@ -16,7 +16,7 @@
     { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
   "shortcuts": [
-    { "name": "Rides", "url": "./#rides", "icons": [{ "src": "icon-192.png", "sizes": "192x192" }] },
+    { "name": "Workouts", "url": "./#rides", "icons": [{ "src": "icon-192.png", "sizes": "192x192" }] },
     { "name": "Fitness", "url": "./#fitness", "icons": [{ "src": "icon-192.png", "sizes": "192x192" }] },
     { "name": "Sleep", "url": "./#sleep", "icons": [{ "src": "icon-192.png", "sizes": "192x192" }] }
   ]
