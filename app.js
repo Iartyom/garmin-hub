@@ -18,11 +18,11 @@ let tab = LS.get("gh.tab", "today");
 const SKIN_BAR = { term: "#0b0d10", game: "#0b0d26", synth: "#0a0218", pro: "#f2f3f5" };
 // Per-skin vocabulary: the same screen speaks plain English, shell or RPG. Missing keys fall back to base.
 const WORDS = {
-  base: { normal: "Normal for you", insights: "What your data says", brand: "GARMIN·HUB", today: "Today", rides: "Workouts", fitness: "Fitness", sleep: "Sleep",
+  base: { normal: "Today vs your usual", insights: "What your data says", brand: "GARMIN·HUB", today: "Today", rides: "Workouts", fitness: "Fitness", sleep: "Sleep",
     readiness: "Readiness", plan: "Today's plan", engine: "Engine", riding: "Riding", vo2: "VO2max", rhr: "Resting HR", steps: "Steps/day",
     night: "Last night", sleepAvg: "Sleep avg", floors: "Floors", week: "This week", nRides: "Rides", longest: "Longest",
     hard: "Go hard", moderate: "Moderate", easy: "Take it easy", calib: "Calibrating" },
-  term: { normal: "baseline --30d", insights: "grep --patterns", brand: "user@garmin-hub:~$", today: "./today", rides: "./workouts", fitness: "./fitness", sleep: "./sleep",
+  term: { normal: "diff --usual", insights: "grep --patterns", brand: "user@garmin-hub:~$", today: "./today", rides: "./workouts", fitness: "./fitness", sleep: "./sleep",
     readiness: "readiness --today", plan: "suggested_cmd", engine: "engine --from-body", riding: "rides --summary",
     vo2: "vo2max", rhr: "rest_hr", steps: "steps/day", night: "sleep_last", sleepAvg: "sleep_avg", floors: "floors",
     week: "this_week", nRides: "rides", longest: "longest",
@@ -117,7 +117,7 @@ function deriveLoad(d) {
   const by = {}; d.acts.forEach(a => { const day = a.date.slice(0, 10); by[day] = (by[day] || 0) + (a.load || 0); });
   let ctl = 0, atl = 0; d.wellness.forEach(w => { const l = by[w.d] || 0; ctl += (l - ctl) / 42; atl += (l - atl) / 7; w.ctl = ctl; w.atl = atl; });
 }
-const APP_VER = "v17";   // keep in step with CACHE in sw.js; shown after sync so it's obvious which build the phone runs
+const APP_VER = "v18";   // keep in step with CACHE in sw.js; shown after sync so it's obvious which build the phone runs
 async function sync() {
   if (!cfg.key) { openSettings(); return; }
   status("Syncing…");
@@ -360,29 +360,19 @@ function driversHtml(D) {
       <div class="dbar"><i class="${pos ? "pos" : "neg"}" style="${pos ? "left:50%" : `left:${50 - w}%`};width:${Math.max(w, .8)}%"></i></div><b class="${pos ? "up-good" : "up-bad"}">${pos ? "+" : "−"}${Math.abs(v).toFixed(0)}</b></div>`; }).join("")}
     </div>`;
 }
-// Sparkline with your personal normal band (mean ± 1 SD of the 28 days before today) and today's dot.
-// vals = [[date, value]...] oldest→newest; fmt formats a value for tooltips.
-function spark(vals, fmt) {
-  const W = 300, H = 34, P = 4, xs = vals.map(v => v[1]).filter(v => v != null);
-  if (xs.length < 3) return "";
-  const base = vals.slice(-29, -1).map(v => v[1]).filter(v => v != null), m = mean(base), d = base.length > 2 ? sd(base) : 0;
-  const lo = Math.min(...xs, m - d), hi = Math.max(...xs, m + d), y = v => H - P - (v - lo) / ((hi - lo) || 1) * (H - 2 * P), x = i => P + i * (W - 2 * P) / Math.max(1, vals.length - 1);
-  let path = "", pen = false;
-  vals.forEach(([, v], i) => { if (v == null) { pen = false; return; } path += `${pen ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`; pen = true; });
-  const li = vals.length - 1 - [...vals].reverse().findIndex(v => v[1] != null), lv = vals[li][1];
-  const hits = vals.map(([dt, v], i) => v == null ? "" : `<rect x="${(x(i) - W / vals.length / 2).toFixed(1)}" y="0" width="${(W / vals.length).toFixed(1)}" height="${H}" fill="transparent"${tipAttr(`${short(dt)}: ${fmt(v)}`)}/>`).join("");
-  return `<svg class="spark" viewBox="0 0 ${W} ${H}" role="img" aria-label="30-day trend">
-    ${base.length > 2 ? `<rect x="0" y="${y(m + d).toFixed(1)}" width="${W}" height="${Math.max(1, y(m - d) - y(m + d)).toFixed(1)}" class="band"/>` : ""}
-    <path d="${path}" class="sl"/><circle cx="${x(li).toFixed(1)}" cy="${y(lv).toFixed(1)}" r="4.5" class="sd"/>${hits}</svg>`;
-}
-// "Normal for you" row: label, latest value, verdict vs your own band, sparkline.
+// "Today vs your usual" row: value, a range strip (shaded = your usual range = mean ± 1 SD of the previous 28 days,
+// dot = latest), and a plain-words verdict. A single position on a bar reads faster than a sparkline for "is this normal?".
 function normalRow(label, vals, fmt, downGood) {
   const xs = vals.filter(v => v[1] != null); if (xs.length < 5) return "";
   const last = xs[xs.length - 1][1], base = vals.slice(-29, -1).map(v => v[1]).filter(v => v != null);
-  const m = mean(base), d = Math.max(sd(base), 1e-9), z = (last - m) / d;
-  const word = Math.abs(z) < 1 ? "normal" : z > 0 ? "high" : "low", good = Math.abs(z) < 1 ? null : (z < 0) === downGood;
-  return `<div class="nrow"><div class="nhead"><span>${esc(label)}</span><b>${fmt(last)}</b>
-    <em class="${good == null ? "muted" : good ? "up-good" : "up-bad"}">${good == null ? "● " : z > 0 ? "▲ " : "▼ "}${word}<small> · usual ${fmt(m)}</small></em></div>${spark(vals, fmt)}</div>`;
+  if (base.length < 5) return "";
+  const m = mean(base), d = Math.max(sd(base), 1e-9), lo = m - d, hi = m + d;
+  const a = Math.min(lo, last, ...base), b = Math.max(hi, last, ...base), pad = (b - a) * .08 || 1, A = a - pad, B = b + pad, pos = v => (v - A) / (B - A) * 100;
+  const z = (last - m) / d, inside = Math.abs(z) < 1, good = (z < 0) === downGood;
+  const word = inside ? "Normal for you" : `${z > 0 ? "Higher" : "Lower"} than usual · ${good ? "good" : "watch"}`;
+  return `<div class="nrow"${tipAttr(`${label}: ${fmt(last)} · usual ${fmt(lo)}–${fmt(hi)}`)}><div class="nhead"><span>${esc(label)}</span><b>${fmt(last)}</b></div>
+    <div class="rstrip"><i class="rband" style="left:${pos(lo).toFixed(1)}%;width:${(pos(hi) - pos(lo)).toFixed(1)}%"></i><i class="rdot ${inside ? "" : good ? "g" : "b"}" style="left:${pos(last).toFixed(1)}%"></i></div>
+    <div class="nfoot"><span>usual ${fmt(lo).replace(/ [^\d\s]+$/, "")} – ${fmt(hi)}</span><em class="${inside ? "muted" : good ? "up-good" : "up-bad"}">${inside ? "" : z > 0 ? "▲ " : "▼ "}${word}</em></div></div>`;
 }
 const series = (days, f) => { const out = []; for (let i = days - 1; i >= 0; i--) { const d = iso(new Date(Date.now() - i * 864e5)); out.push([d, f(d)]); } return out; };
 function normalCard() {
@@ -394,7 +384,7 @@ function normalCard() {
     db.garmin ? normalRow("Stress (day avg)", series(30, d => G(d)?.stress || null), v => r0(v), true) : "",
     normalRow("Steps", series(30, d => n(d).steps || null), v => r0(v).toLocaleString(), false),
   ].join("");
-  return rows ? `<div class="card"><h2>${T("normal")}</h2>${rows}<p class="muted note">Shaded band = your usual range over the previous 28 days.</p></div>` : "";
+  return rows ? `<div class="card"><h2>${T("normal")}</h2>${rows}<p class="muted note">Shaded = your usual range (last 4 weeks). Dot = today.</p></div>` : "";
 }
 // Insights: split your own days into two groups and keep only differences that pass a Welch t-test (|t| > 2, n ≥ 6 each).
 function welch(a, b) { if (a.length < 6 || b.length < 6) return null; const t = (mean(a) - mean(b)) / Math.sqrt(sd(a) ** 2 / a.length + sd(b) ** 2 / b.length); return Math.abs(t) > 2 ? t : null; }

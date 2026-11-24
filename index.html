@@ -293,6 +293,11 @@ select{width:100%;font:14px var(--mono);padding:10px;border-radius:8px;border:1p
 .nhead{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:baseline}
 .nhead span{font-size:13px;color:var(--ink2)} .nhead b{font:700 18px var(--mono);text-align:right}
 .nhead em{grid-column:1/-1;font-style:normal;font-size:12px} .nhead em small{color:var(--muted)}
+.rstrip{position:relative;height:10px;margin:8px 0 5px;border-radius:5px;background:var(--line)}
+.rband{position:absolute;top:0;bottom:0;border-radius:5px;background:rgba(var(--acc-rgb),.35)}
+.rdot{position:absolute;top:50%;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;background:var(--ink);box-shadow:0 0 0 3px var(--card)}
+.rdot.g{background:var(--good)} .rdot.b{background:var(--bad)}
+.nfoot{display:flex;justify-content:space-between;gap:8px;font-size:12px} .nfoot span{color:var(--muted)} .nfoot em{font-style:normal;font-weight:600}
 .spark{display:block;width:100%;height:auto;margin-top:4px}
 .spark .band{fill:rgba(var(--acc-rgb),.12)} .spark .sl{fill:none;stroke:var(--s1);stroke-width:2;stroke-linejoin:round}
 .spark .sd{fill:var(--s1);stroke:var(--card);stroke-width:2}
