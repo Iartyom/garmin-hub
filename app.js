@@ -18,16 +18,16 @@ let tab = LS.get("gh.tab", "today");
 const SKIN_BAR = { term: "#0b0d10", game: "#0b0d26", synth: "#0a0218", pro: "#f2f3f5" };
 // Per-skin vocabulary: the same screen speaks plain English, shell or RPG. Missing keys fall back to base.
 const WORDS = {
-  base: { normal: "Today vs your usual", insights: "What your data says", brand: "GARMIN·HUB", today: "Today", rides: "Workouts", fitness: "Fitness", sleep: "Sleep",
+  base: { todayWk: "Today's training", lastWk: "Last workout", normal: "Today vs your usual", insights: "What your data says", brand: "GARMIN·HUB", today: "Today", rides: "Workouts", fitness: "Fitness", sleep: "Sleep",
     readiness: "Readiness", plan: "Today's plan", engine: "Engine", riding: "Riding", vo2: "VO2max", rhr: "Resting HR", steps: "Steps/day",
     night: "Last night", sleepAvg: "Sleep avg", floors: "Floors", week: "This week", nRides: "Rides", longest: "Longest",
     hard: "Go hard", moderate: "Moderate", easy: "Take it easy", calib: "Calibrating" },
-  term: { normal: "diff --usual", insights: "grep --patterns", brand: "user@garmin-hub:~$", today: "./today", rides: "./workouts", fitness: "./fitness", sleep: "./sleep",
+  term: { todayWk: "tail today.log", lastWk: "tail last.log", normal: "diff --usual", insights: "grep --patterns", brand: "user@garmin-hub:~$", today: "./today", rides: "./workouts", fitness: "./fitness", sleep: "./sleep",
     readiness: "readiness --today", plan: "suggested_cmd", engine: "engine --from-body", riding: "rides --summary",
     vo2: "vo2max", rhr: "rest_hr", steps: "steps/day", night: "sleep_last", sleepAvg: "sleep_avg", floors: "floors",
     week: "this_week", nRides: "rides", longest: "longest",
     hard: "STATUS: GO HARD", moderate: "STATUS: MODERATE", easy: "STATUS: REST", calib: "STATUS: CALIBRATING" },
-  game: { normal: "Status effects", insights: "Lore unlocked", brand: "PLAYER ONE", today: "Status", rides: "Quests", fitness: "Training", sleep: "Inn",
+  game: { todayWk: "Today's quest", lastWk: "Last quest", normal: "Status effects", insights: "Lore unlocked", brand: "PLAYER ONE", today: "Status", rides: "Quests", fitness: "Training", sleep: "Inn",
     readiness: "HP", plan: "Next quest", engine: "Character stats", riding: "Quest log",
     vo2: "STA·VO2max", rhr: "DEF·Rest HR", steps: "AGI·Steps", night: "MANA·Sleep", sleepAvg: "MANA avg", floors: "Floors",
     week: "This week", nRides: "Quests", longest: "Longest",
@@ -117,7 +117,7 @@ function deriveLoad(d) {
   const by = {}; d.acts.forEach(a => { const day = a.date.slice(0, 10); by[day] = (by[day] || 0) + (a.load || 0); });
   let ctl = 0, atl = 0; d.wellness.forEach(w => { const l = by[w.d] || 0; ctl += (l - ctl) / 42; atl += (l - atl) / 7; w.ctl = ctl; w.atl = atl; });
 }
-const APP_VER = "v21";   // keep in step with CACHE in sw.js; shown after sync so it's obvious which build the phone runs
+const APP_VER = "v22";   // keep in step with CACHE in sw.js; shown after sync so it's obvious which build the phone runs
 async function sync() {
   if (!cfg.key) { openSettings(); return; }
   status("Syncing…");
@@ -300,6 +300,11 @@ function renderToday(v) {
   const rhr7 = avgDays(W, "rhr", 0, 6), rhr90 = avgDays(W, "rhr", 84, 97), st7 = avgDays(W, "steps", 0, 6), st14 = avgDays(W, "steps", 7, 13);
   const sl7 = avgDays(W, "sleep", 0, 6), sl14 = avgDays(W, "sleep", 7, 13), w = latest || {};
   h += commuteCard(R ? R.level : "calib", rides);
+  // Today's workouts (any type); on a day without one, the most recent workout so the card is never empty.
+  // New activities arrive via Intervals.icu right after the watch syncs; Garmin-only history via the PC pull.
+  { const td = iso(new Date()), todays = db.acts.filter(a => a.date.slice(0, 10) === td), list = todays.length ? todays : db.acts.slice(0, 1);
+    if (list.length) { const t = list.reduce((x, a) => x + (a.time || 0), 0), ld = list.reduce((x, a) => x + (a.load || 0), 0);
+      h += `<div class="card"><h2>${todays.length ? T("todayWk") : T("lastWk")}</h2>${todays.length ? `<p class="muted" style="margin:0 0 6px">${hm(t)}${ld ? ` · load ${r0(ld)}` : ""}</p>` : ""}${list.map(workoutButton).join("")}</div>`; } }
   h += normalCard() + insightsCard();
   v.innerHTML = h;
 }
