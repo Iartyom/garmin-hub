@@ -1,99 +1,121 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Garmin Hub</title>
 <meta name="description" content="Personal Garmin dashboard: rides, fitness, sleep, from Intervals.icu.">
-<meta name="theme-color" content="#121212">
+<meta name="theme-color" content="#06080c">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Garmin Hub">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-192.png">
+<!-- Fonts are decoration only: offline the app falls back to system fonts. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <style>
-/* Tokens: light + dark, chart series from the validated reference palette (slots 1-2). */
+/* Cyber theme: one dark look on purpose (it's the app's identity). Series: cyan = slot 1, magenta = slot 2,
+   picked far apart in hue AND lightness so fitness vs fatigue still separate for colour-blind eyes. */
 :root{
-  color-scheme: light;
-  --bg:#f4f4f2; --card:#fcfcfb; --line:#e2e1dc; --ink:#0b0b0b; --ink2:#52514e; --muted:#8a8984;
-  --s1:#2a78d6; --s2:#eb6834; --good:#1a8a2e; --warn:#b77900; --bad:#d23b3a; --accent:#2a78d6;
-}
-@media (prefers-color-scheme: dark){
-  :root:not([data-theme="light"]){
-    color-scheme: dark;
-    --bg:#121212; --card:#1c1c1b; --line:#2f2f2d; --ink:#f0efec; --ink2:#c3c2b7; --muted:#8d8c86;
-    --s1:#3987e5; --s2:#d95926; --good:#35b24a; --warn:#d9a020; --bad:#e66767; --accent:#3987e5;
-  }
-}
-:root[data-theme="dark"]{
   color-scheme: dark;
-  --bg:#121212; --card:#1c1c1b; --line:#2f2f2d; --ink:#f0efec; --ink2:#c3c2b7; --muted:#8d8c86;
-  --s1:#3987e5; --s2:#d95926; --good:#35b24a; --warn:#d9a020; --bad:#e66767; --accent:#3987e5;
+  --bg:#06080c; --card:#0b1017; --card2:#0f1620; --line:#17323d; --ink:#e8f6fa; --ink2:#9fb8c2; --muted:#5f7a86;
+  --s1:#22e3ff; --s2:#ff3fa4; --good:#9dff3b; --warn:#ffc53d; --bad:#ff4f5e; --accent:#22e3ff;
+  --glow:0 0 12px rgba(34,227,255,.35);
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace; --disp:Orbitron,"Segoe UI",system-ui,sans-serif;
 }
 *{box-sizing:border-box}
-html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
-body{padding:env(safe-area-inset-top) 0 calc(64px + env(safe-area-inset-bottom))}
-header{display:flex;align-items:center;gap:8px;padding:14px 16px 6px}
-header h1{font-size:20px;margin:0;flex:1}
-button{font:inherit;color:inherit;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 12px;cursor:pointer}
-button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
-.icon-btn{padding:6px 10px}
-#status{padding:0 16px;color:var(--muted);font-size:13px;min-height:18px}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
+/* faint grid + top glow, the "HUD" backdrop */
+body{padding:env(safe-area-inset-top) 0 calc(70px + env(safe-area-inset-bottom));min-height:100vh;
+  background:
+    radial-gradient(120% 50% at 50% -10%, rgba(34,227,255,.14), transparent 60%),
+    linear-gradient(rgba(34,227,255,.045) 1px, transparent 1px) 0 0/100% 28px,
+    linear-gradient(90deg, rgba(34,227,255,.045) 1px, transparent 1px) 0 0/28px 100%,
+    var(--bg);background-attachment:fixed}
+header{display:flex;align-items:center;gap:8px;padding:16px 16px 4px;max-width:720px;margin:0 auto}
+header h1{font:800 20px/1 var(--disp);letter-spacing:.08em;margin:0;flex:1;text-transform:uppercase;text-shadow:var(--glow)}
+header h1 small{display:block;font:500 10px var(--mono);color:var(--accent);letter-spacing:.25em;margin-bottom:4px;text-shadow:none}
+button{font:inherit;color:inherit;background:var(--card2);border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer}
+button:active{transform:scale(.97)}
+button.primary{background:transparent;border-color:var(--accent);color:var(--accent);box-shadow:var(--glow),inset 0 0 10px rgba(34,227,255,.15);font-weight:600}
+.icon-btn{padding:7px 11px;font-family:var(--mono);font-size:13px}
+#status{padding:0 16px;color:var(--muted);font:12px var(--mono);min-height:18px;max-width:720px;margin:0 auto}
 main{padding:8px 16px;max-width:720px;margin:0 auto}
-.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
-.card h2{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink2);margin:0 0 10px;font-weight:600}
-/* minmax(0,1fr): long values ("12,595") must shrink, not push the grid past the screen edge */
+/* cards: thin neon edge with cut corner brackets */
+.card{position:relative;background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
+.card::before,.card::after{content:"";position:absolute;width:14px;height:14px;border:2px solid var(--accent);opacity:.7}
+.card::before{top:-1px;left:-1px;border-right:0;border-bottom:0;border-top-left-radius:12px}
+.card::after{bottom:-1px;right:-1px;border-left:0;border-top:0;border-bottom-right-radius:12px}
+.card h2{font:700 11px var(--disp);letter-spacing:.18em;text-transform:uppercase;color:var(--accent);margin:0 0 12px}
+.card h2::before{content:"// ";color:var(--muted)}
 .tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
-.tile{background:var(--bg);border-radius:10px;padding:10px;min-width:0;overflow:hidden}
-@media (max-width:380px){.tile b{font-size:19px}}
-.tile b{display:block;font-size:22px;font-variant-numeric:tabular-nums}
-.tile span{font-size:12px;color:var(--ink2)}
-.tile small{display:block;font-size:11px;color:var(--muted)}
-.verdict{display:flex;gap:12px;align-items:flex-start}
-.verdict .dot{flex:none;width:38px;height:38px;border-radius:50%;display:grid;place-items:center;font-weight:700;color:#fff;font-size:18px}
-.verdict h3{margin:0 0 4px;font-size:19px}
-.verdict ul{margin:4px 0 0;padding-left:18px;color:var(--ink2);font-size:14px}
-.warnbar{border-left:4px solid var(--warn);background:var(--card);padding:10px 12px;border-radius:8px;margin-bottom:12px;font-size:14px}
+.tile{background:rgba(34,227,255,.04);border:1px solid rgba(34,227,255,.1);border-radius:8px;padding:9px 10px;min-width:0;overflow:hidden}
+.tile b{display:block;font:700 21px/1.2 var(--mono);font-variant-numeric:tabular-nums;color:var(--ink)}
+.tile span{font:600 10px var(--disp);letter-spacing:.1em;text-transform:uppercase;color:var(--ink2)}
+.tile small{display:block;font:11px var(--mono);color:var(--muted)}
+@media (max-width:380px){.tile b{font-size:18px}}
+/* readiness ring */
+.verdict{display:flex;gap:16px;align-items:center}
+.ring{flex:none;position:relative;width:108px;height:108px}
+.ring svg{width:108px;height:108px;transform:rotate(-90deg)}
+.ring .num{position:absolute;inset:0;display:grid;place-items:center;text-align:center;font:800 30px/1 var(--disp)}
+.ring .num small{display:block;font:500 9px var(--mono);letter-spacing:.2em;color:var(--muted);margin-top:4px}
+.verdict h3{margin:0 0 6px;font:800 17px/1.2 var(--disp);letter-spacing:.06em;text-transform:uppercase}
+.verdict ul{margin:0;padding:0;list-style:none;font-size:13px}
+.verdict li{padding:2px 0;color:var(--ink2)}
+.verdict li.flag{color:var(--ink)}
+.verdict li::before{content:"▸ ";color:var(--muted)}
+.verdict li.flag::before{content:"⚠ ";color:var(--warn)}
+.warnbar{border:1px solid rgba(255,197,61,.4);border-left:3px solid var(--warn);background:rgba(255,197,61,.06);padding:10px 12px;border-radius:8px;margin-bottom:12px;font-size:14px}
 .muted{color:var(--muted)}
 .row{display:flex;justify-content:space-between;gap:8px;align-items:center}
-.ride{display:block;width:100%;text-align:left;margin-bottom:8px;padding:12px}
+.ride{display:block;width:100%;text-align:left;margin-bottom:8px;padding:12px;background:rgba(34,227,255,.03);border-color:rgba(34,227,255,.14)}
+.ride:hover{border-color:var(--accent)}
 .ride .t{font-weight:600}
-.ride .m{color:var(--ink2);font-size:13px;font-variant-numeric:tabular-nums}
+.ride .m{color:var(--ink2);font:12.5px var(--mono);font-variant-numeric:tabular-nums;margin-top:3px}
 .chart{position:relative;width:100%;touch-action:pan-y}
 .chart svg{display:block;width:100%;overflow:visible}
-.chart .grid{stroke:var(--line);stroke-width:1}
-.chart .axis{fill:var(--muted);font-size:11px}
-.chart .end{fill:var(--ink2);font-size:11px}
-.chart .xhair{stroke:var(--muted);stroke-width:1}
-.tip{position:absolute;top:0;pointer-events:none;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:12px;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.18);display:none;z-index:2}
+.chart .grid{stroke:rgba(34,227,255,.09);stroke-width:1}
+.chart .axis{fill:var(--muted);font:10px var(--mono)}
+.chart .end{fill:var(--ink2);font:10px var(--mono)}
+.chart .xhair{stroke:var(--accent);stroke-width:1;stroke-dasharray:3 3}
+.tip{position:absolute;top:0;pointer-events:none;background:rgba(6,8,12,.94);border:1px solid var(--accent);border-radius:6px;padding:6px 8px;font:12px var(--mono);white-space:nowrap;box-shadow:var(--glow);display:none;z-index:2}
 .tip i{display:inline-block;width:10px;height:3px;border-radius:2px;vertical-align:middle;margin-right:5px}
-.legend{display:flex;gap:14px;font-size:12px;color:var(--ink2);margin-bottom:6px}
+.legend{display:flex;gap:14px;font:11px var(--mono);color:var(--ink2);margin-bottom:6px}
 .legend i{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:middle;margin-right:5px}
-.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
-.seg button{border:0;border-radius:0;padding:5px 10px;font-size:13px;background:transparent}
-.seg button.on{background:var(--accent);color:#fff}
-.zones .z{display:grid;grid-template-columns:34px 1fr 54px;gap:8px;align-items:center;font-size:13px;margin:4px 0}
-.zones .bar{height:12px;border-radius:0 4px 4px 0;background:var(--s1)}
-#map{height:260px;border-radius:10px;margin-bottom:12px;background:var(--bg)}
-nav{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--card);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom);z-index:5}
-nav button{flex:1;border:0;border-radius:0;background:transparent;padding:10px 0 12px;font-size:12px;color:var(--muted)}
-nav button.on{color:var(--accent);font-weight:600}
-nav button svg{display:block;margin:0 auto 2px;width:22px;height:22px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;border-radius:0;padding:5px 10px;font:12px var(--mono);background:transparent}
+.seg button.on{background:rgba(34,227,255,.15);color:var(--accent);box-shadow:inset 0 -2px 0 var(--accent)}
+.zones .z{display:grid;grid-template-columns:30px 1fr 54px;gap:8px;align-items:center;font:12px var(--mono);margin:5px 0}
+.zones .bar{height:10px;border-radius:0 4px 4px 0;background:var(--s1);box-shadow:0 0 8px rgba(34,227,255,.5)}
+#map{height:260px;border-radius:10px;margin-bottom:12px;background:var(--card);border:1px solid var(--line);overflow:hidden}
+/* dark map tiles to match the HUD (pure CSS filter on the OSM tile layer) */
+#map .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(.85) saturate(.6)}
+#map .leaflet-container{background:var(--card)}
+nav{position:fixed;left:0;right:0;bottom:0;display:flex;background:rgba(6,8,12,.92);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom);z-index:5}
+nav button{flex:1;border:0;border-radius:0;background:transparent;padding:10px 0 12px;font:600 10px var(--disp);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+nav button.on{color:var(--accent);text-shadow:var(--glow)}
+nav button.on svg{filter:drop-shadow(0 0 5px var(--accent))}
+nav button svg{display:block;margin:0 auto 3px;width:22px;height:22px}
 .sheet{position:fixed;inset:0;background:var(--bg);z-index:10;overflow:auto;padding:env(safe-area-inset-top) 0 24px;display:none}
 .sheet.open{display:block}
-label{display:block;font-size:13px;color:var(--ink2);margin:12px 0 4px}
-input{width:100%;font:inherit;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink)}
-table{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+label{display:block;font:600 10px var(--disp);letter-spacing:.12em;text-transform:uppercase;color:var(--ink2);margin:14px 0 5px}
+input{width:100%;font:14px var(--mono);padding:10px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink)}
+input:focus{outline:none;border-color:var(--accent);box-shadow:var(--glow)}
+table{width:100%;border-collapse:collapse;font:12px var(--mono);font-variant-numeric:tabular-nums}
 td,th{padding:4px 6px;border-bottom:1px solid var(--line);text-align:right}
 td:first-child,th:first-child{text-align:left}
-details summary{cursor:pointer;color:var(--ink2);font-size:13px;margin-top:8px}
+details summary{cursor:pointer;color:var(--ink2);font:12px var(--mono);margin-top:8px}
+a{color:var(--accent)}
+@media (prefers-reduced-motion:no-preference){.card{animation:in .35s ease both}@keyframes in{from{opacity:0;transform:translateY(6px)}}}
 </style>
 </head>
 <body>
 <header>
-  <h1 id="title">Today</h1>
-  <button class="icon-btn" id="syncBtn" aria-label="Sync">⟳ Sync</button>
+  <h1 id="title"><small>GARMIN·HUB</small>Today</h1>
+  <button class="icon-btn" id="syncBtn" aria-label="Sync">⟳ SYNC</button>
   <button class="icon-btn" id="setBtn" aria-label="Settings">⚙</button>
 </header>
 <div id="status"></div>
@@ -108,10 +130,10 @@ details summary{cursor:pointer;color:var(--ink2);font-size:13px;margin-top:8px}
 
 <!-- Settings: API key stays in this phone's browser storage only. -->
 <div class="sheet" id="settings">
-  <header><h1>Settings</h1><button id="setClose">Done</button></header>
+  <header><h1><small>GARMIN·HUB</small>Settings</h1><button id="setClose">Done</button></header>
   <main>
     <div class="card">
-      <h2>Intervals.icu connection</h2>
+      <h2>Intervals.icu link</h2>
       <p class="muted">Garmin Connect → Intervals.icu → this app. In Intervals.icu: Settings → Connections → link Garmin; then Settings → Developer Settings for the key and athlete ID.</p>
       <label for="key">API key</label>
       <input id="key" type="password" autocomplete="off" spellcheck="false">

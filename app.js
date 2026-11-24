@@ -40,7 +40,7 @@ async function api(path) {
   return r.json();
 }
 // Keep only what the screens use: a year of full wellness objects would blow the ~5MB storage limit.
-const slimW = w => ({ d: w.id, ctl: w.ctl, atl: w.atl, rhr: w.restingHR, hrv: w.hrv, sleep: w.sleepSecs, sleepScore: w.sleepScore, steps: w.steps, vo2: w.vo2max, weight: w.weight });
+const slimW = w => ({ d: w.id, ctl: w.ctl, atl: w.atl, rhr: w.restingHR, hrv: w.hrv, sleep: w.sleepSecs, sleepScore: w.sleepScore, steps: w.steps, vo2: w.vo2max, weight: w.weight, floors: w.floorsClimbed });   // Venu 2: no HRV, has floors
 const slimA = a => ({
   id: a.id, date: a.start_date_local, type: a.type, name: a.name, dist: a.distance, time: a.moving_time,
   climb: a.total_elevation_gain, spd: a.average_speed, maxSpd: a.max_speed, hr: a.average_heartrate,
@@ -108,7 +108,7 @@ function lineChart(el, o) {
   for (const s of o.series) {
     let d = "", pen = false;
     s.values.forEach((v, i) => { if (v == null || isNaN(v)) { pen = false; return; } d += `${pen ? "L" : "M"}${xs(i).toFixed(1)},${ys(v).toFixed(1)}`; pen = true; });
-    g += `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    g += `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" style="filter:drop-shadow(0 0 4px ${s.color})"/>`;
     // Direct label at the line's end so identity isn't color-only (multi-series charts).
     if (o.series.length > 1) { const li = s.values.map((v, i) => v == null ? -1 : i).filter(i => i >= 0).pop(); if (li != null) g += `<text class="end" x="${xs(li) + 5}" y="${ys(s.values[li]) + 4}">${esc(s.short || s.name)}</text>`; }
   }
@@ -166,23 +166,38 @@ function readiness() {
   if (last.sleep) { if (last.sleep < 6 * 3600) flags.push(`Short sleep: ${hm(last.sleep)}`); else good.push(`Slept ${hm(last.sleep)}`); }
   const tsb = last.ctl != null && last.atl != null ? last.ctl - last.atl : null;
   if (tsb != null) { if (tsb < -25) flags.push(`Heavy fatigue: form ${r0(tsb)}`); else if (tsb > -10) good.push(`Fresh: form ${r0(tsb)}`); }
+  // No baseline yet (new account / no history): don't pretend; say how many days are still needed.
+  if (rhrs.length < 7 && hrvs.length < 7) return { last, flags, good, tsb, level: "calib", need: 7 - Math.max(rhrs.length, hrvs.length) };
   const level = flags.length >= 2 ? "easy" : flags.length === 1 || (tsb != null && tsb <= -10) ? "moderate" : "hard";
-  return { last, flags, good, tsb, level };
+  // Score 0-100 (my own blend, not Garmin's): each baseline deviation of 1 SD moves it ~8 points,
+  // sleep ±6 per hour around 7h, form adds up to +10 / −15. Venu 2 sends no HRV, so RHR carries most weight.
+  let score = 70;
+  if (last.rhr && rhrs.length >= 7) score -= (last.rhr - mean(rhrs)) / Math.max(2, sd(rhrs)) * 8;
+  if (last.hrv && hrvs.length >= 7) score += (last.hrv - mean(hrvs)) / Math.max(1, sd(hrvs)) * 8;
+  if (last.sleep) score += (last.sleep / 3600 - 7) * 6;
+  if (tsb != null) score += Math.max(-15, Math.min(10, tsb / 2));
+  return { last, flags, good, tsb, level, score: Math.round(Math.max(5, Math.min(99, score))) };
 }
+// Neon progress ring for the readiness score (stroke-dasharray trick: circumference × fraction).
+const ring = (val, color, label) => { const c = 2 * Math.PI * 46, f = val == null ? 0 : val / 100;
+  return `<div class="ring"><svg viewBox="0 0 108 108"><circle cx="54" cy="54" r="46" fill="none" stroke="rgba(34,227,255,.1)" stroke-width="8"/>
+    <circle cx="54" cy="54" r="46" fill="none" stroke="${color}" stroke-width="8" stroke-linecap="round" stroke-dasharray="${(c * f).toFixed(1)} ${c.toFixed(1)}" style="filter:drop-shadow(0 0 6px ${color})"/></svg>
+    <div class="num" style="color:${color};text-shadow:0 0 12px ${color}"><div>${val == null ? "··" : val}<small>${label}</small></div></div></div>`; };
 function renderToday(v) {
   const R = readiness(), W = db.wellness, latest = [...W].reverse().find(w => w.rhr || w.hrv || w.sleep || w.steps);
   let h = "";
   // Stale-data nudge: the phone sync is also what refreshes the watch's satellite data (faster GPS lock).
   if (latest && daysAgo(latest.d) >= 2) h += `<div class="warnbar"><b>Watch last synced ${daysAgo(latest.d)} days ago.</b> Open Garmin Connect on your phone and let it sync, which also refreshes GPS satellite data so your next ride locks faster. Then tap Sync here.</div>`;
   if (R) {
-    const V = { hard: ["Good to go hard", "var(--good)", "✓"], moderate: ["Moderate day", "var(--warn)", "!"], easy: ["Take it easy", "var(--bad)", "✕"] }[R.level];
-    h += `<div class="card"><h2>Today's call · ${short(R.last.d)}</h2><div class="verdict"><div class="dot" style="background:${V[1]}">${V[2]}</div><div><h3>${V[0]}</h3>
-      <ul>${R.flags.map(f => `<li>${esc(f)}</li>`).join("")}${R.good.map(f => `<li class="muted">${esc(f)}</li>`).join("")}</ul></div></div></div>`;
+    const V = { hard: ["Go hard", css("--good")], moderate: ["Moderate", css("--warn")], easy: ["Take it easy", css("--bad")], calib: ["Calibrating", css("--s1")] }[R.level];
+    const notes = R.level === "calib" ? [`<li>Learning your normal: ${R.need} more day${R.need === 1 ? "" : "s"} of watch data needed.</li>`] : [];
+    h += `<div class="card"><h2>Readiness · ${short(R.last.d)}</h2><div class="verdict">${ring(R.score ?? null, V[1], R.level === "calib" ? "WAIT" : "READY")}<div><h3 style="color:${V[1]}">${V[0]}</h3>
+      <ul>${notes.join("")}${R.flags.map(f => `<li class="flag">${esc(f)}</li>`).join("")}${R.good.map(f => `<li>${esc(f)}</li>`).join("")}</ul></div></div></div>`;
   }
   const w = latest || {}, f = [...W].reverse().find(x => x.ctl != null) || {}, vo = [...W].reverse().find(x => x.vo2) || {};
   const tile = (val, lab, sub) => `<div class="tile"><span>${lab}</span><b>${val}</b>${sub ? `<small>${sub}</small>` : ""}</div>`;
   h += `<div class="card"><h2>Body</h2><div class="tiles">
-    ${tile(r0(w.rhr), "Resting HR", "bpm")}${tile(r0(w.hrv), "HRV", "ms")}${tile(w.sleep ? hm(w.sleep) : "–", "Sleep", w.sleepScore ? `score ${w.sleepScore}` : "")}
+    ${tile(r0(w.rhr), "Resting HR", "bpm")}${W.some(x => x.hrv) ? tile(r0(w.hrv), "HRV", "ms") : tile(w.floors ?? "–", "Floors", "climbed")}${tile(w.sleep ? hm(w.sleep) : "–", "Sleep", w.sleepScore ? `score ${w.sleepScore}` : "")}
     ${tile(r0(f.ctl), "Fitness", "CTL")}${tile(r0(f.atl), "Fatigue", "ATL")}${tile(f.ctl != null ? r0(f.ctl - f.atl) : "–", "Form", "fitness − fatigue")}
     ${tile(w.steps != null ? w.steps.toLocaleString() : "–", "Steps", "")}${tile(vo.vo2 ? vo.vo2.toFixed(0) : "–", "VO2max", "")}${tile(w.weight ? w.weight.toFixed(1) : "–", "Weight", "kg")}
   </div></div>`;
@@ -345,7 +360,7 @@ function demoStreams(a) {
 function status(t) { $("#status").textContent = t || ""; }
 function render() {
   document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === tab));
-  $("#title").textContent = { today: "Today", rides: "Rides", fitness: "Fitness", sleep: "Sleep" }[tab];
+  $("#title").innerHTML = "<small>GARMIN·HUB</small>" + { today: "Today", rides: "Rides", fitness: "Fitness", sleep: "Sleep" }[tab];
   const v = $("#view");
   if (!db) { v.innerHTML = `<div class="card"><h2>Welcome</h2><p>Connect Intervals.icu in Settings (⚙) to see your Garmin data, or try the demo first.</p><button class="primary" id="goSet">Open settings</button> <button id="goDemo">Try demo data</button></div>`; return; }
   if (db.demo) status("Demo data. Add your Intervals.icu key in Settings for your own.");
