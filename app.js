@@ -75,21 +75,36 @@ const slimA = a => ({
   maxHr: a.max_heartrate, kcal: a.calories, load: a.icu_training_load, zones: a.icu_hr_zone_times, drift: a.decoupling,
 });
 
+// Garmin extras (Body Battery, stress, intensity minutes, sleep stages, bed/wake times) come from the user's PRIVATE
+// repo, filled by garmin-hub-data/pull.py on their PC. Read with a fine-grained, read-only GitHub token kept on the phone.
+const GH_DATA = "https://api.github.com/repos/Iartyom/garmin-hub-data/contents/data/daily.json";
+let ghTok = LS.get("gh.ghtok", "");
+async function fetchGarmin() {
+  if (!ghTok) return null;
+  const r = await fetch(GH_DATA, { headers: { Authorization: `Bearer ${ghTok}`, Accept: "application/vnd.github.raw+json" }, cache: "no-store" });
+  if (!r.ok) throw new Error(`Garmin extras: GitHub ${r.status}${r.status === 401 || r.status === 404 ? " (check the token)" : ""}`);
+  return r.json();
+}
+// Garmin row for a date (or undefined). Index rebuilt lazily when db changes.
+let gIdx = null, gIdxOf = null;
+const G = d => { if (!db || !db.garmin) return undefined; if (gIdxOf !== db.garmin) { gIdx = Object.fromEntries(db.garmin.map(r => [r.d, r])); gIdxOf = db.garmin; } return gIdx[d]; };
 async function sync() {
   if (!cfg.key) { openSettings(); return; }
   status("Syncing…");
   const now = new Date(), ath = encodeURIComponent(cfg.athlete || "0");
   const q = `oldest=${iso(addDays(now, -365))}&newest=${iso(now)}`;
   try {
-    const [w, a, me] = await Promise.all([api(`/athlete/${ath}/wellness?${q}`), api(`/athlete/${ath}/activities?${q}`), api(`/athlete/${ath}`).catch(() => null)]);
+    let gErr = null;
+    const [w, a, me, gx] = await Promise.all([api(`/athlete/${ath}/wellness?${q}`), api(`/athlete/${ath}/activities?${q}`), api(`/athlete/${ath}`).catch(() => null),
+      fetchGarmin().catch(e => { gErr = e.message; return db && db.garmin || null; })]);   // extras failing must not block the main sync
     if (me && me.sex && !profile.sex) { profile.sex = /^f/i.test(me.sex) ? "f" : "m"; LS.set("gh.profile", profile); }
     db = {
       wellness: w.map(slimW).sort((x, y) => x.d.localeCompare(y.d)),
       acts: a.map(slimA).sort((x, y) => y.date.localeCompare(x.date)),
-      at: Date.now(),
+      garmin: gx, at: Date.now(),
     };
     LS.set("gh.db", db);
-    status(`Synced ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`);
+    status(gErr || `Synced ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}${gx ? " · Garmin extras ✓" : ""}`);
     render();
   } catch (e) {
     // A browser network failure surfaces as TypeError; say so instead of a cryptic "Failed to fetch".
@@ -193,6 +208,11 @@ function readiness() {
   if (last.rhr && rhrs.length >= 7) { const m = mean(rhrs), up = Math.max(3, sd(rhrs)); if (last.rhr > m + up) flags.push(`Resting HR ${last.rhr} (usual ${r0(m)})`); else good.push(`Resting HR normal (${last.rhr})`); }
   if (last.hrv && hrvs.length >= 7) { const m = mean(hrvs), dn = sd(hrvs); if (last.hrv < m - dn) flags.push(`HRV ${r0(last.hrv)} is low (usual ${r0(m)})`); else good.push(`HRV normal (${r0(last.hrv)})`); }
   if (last.sleep) { if (last.sleep < 6 * 3600) flags.push(`Short sleep: ${hm(last.sleep)}`); else good.push(`Slept ${hm(last.sleep)}`); }
+  // Body Battery at wake is Garmin's own overnight-recovery number (built on HRV the Venu 2 measures but never exports),
+  // so it's the best recovery signal available. Under 40 at wake = didn't recharge.
+  const gx = G(last.d), bb = gx && gx.bbWake;
+  if (bb != null) { if (bb < 40) flags.push(`Body Battery only ${bb} at wake`); else good.push(`Body Battery ${bb} at wake`); }
+  if (gx && gx.sleepStress != null && gx.sleepStress > 25) flags.push(`Restless night: sleep stress ${r0(gx.sleepStress)}`);
   // Form only counts LOGGED workouts. Unlogged running/gym made it meaningless, so it's ignored
   // until there are 8+ logged sessions in the last 6 weeks (enough for the 42-day fitness average to mean something).
   const logged = db.acts.filter(a => daysAgo(a.date.slice(0, 10)) <= 42).length;
@@ -208,6 +228,7 @@ function readiness() {
   if (last.hrv && hrvs.length >= 7) score += (last.hrv - mean(hrvs)) / Math.max(1, sd(hrvs)) * 8;
   if (last.sleep) score += (last.sleep / 3600 - 7) * 6;
   if (tsb != null) score += Math.max(-15, Math.min(10, tsb / 2));
+  if (bb != null) score = score * .55 + bb * .45;   // blend: Body Battery already summarises the night, so it gets heavy weight
   return { last, flags, good, tsb, level, score: Math.round(Math.max(5, Math.min(99, score))) };
 }
 // Neon progress ring for the readiness score (stroke-dasharray trick: circumference × fraction).
@@ -242,6 +263,7 @@ function renderToday(v) {
   const rhr7 = avgDays(W, "rhr", 0, 6), rhr90 = avgDays(W, "rhr", 84, 97), st7 = avgDays(W, "steps", 0, 6), st14 = avgDays(W, "steps", 7, 13);
   const sl7 = avgDays(W, "sleep", 0, 6), sl14 = avgDays(W, "sleep", 7, 13), w = latest || {};
   h += commuteCard(R ? R.level : "calib", rides);
+  h += recoveryCard();
   h += `<div class="card"><h2>${T("engine")}</h2><div class="tiles">
     ${dTile(voNow ? voNow.vo2.toFixed(0) : "–", T("vo2"), voNow && vo90 && vo90 !== voNow ? voNow.vo2 - vo90.vo2 : null, false, "vs 90 days", v => v.toFixed(1))}
     ${dTile(rhr7 ? r0(rhr7) : "–", T("rhr"), rhr7 && rhr90 ? rhr7 - rhr90 : null, true, "vs 3 months", v => r0(Math.abs(v)) + " bpm")}
@@ -306,6 +328,26 @@ function suggestion(level, rides) {
   if (level === "calib") return "Ride by feel; the app is still learning your normal resting HR.";
   if (!rides.length) return "Good day for a first proper ride: 45–60 min, easy to steady.";
   return `Good day to push: try a ride of ~${Math.round(longest * 1.15)} km (longest so far ${longest.toFixed(1)} km), or add a few hard 3-min efforts.`;
+}
+
+/* ---------- Garmin extras on Today ---------- */
+// Clock time from Garmin's "local timestamp" (ms, local wall-clock encoded as if UTC).
+const clock = ts => ts == null ? "–" : new Date(ts).toISOString().slice(11, 16);
+// Intensity minutes the way Garmin/WHO count them: vigorous minutes count double. Last 7 days ending today.
+const imWeek = () => { let t = 0; for (let i = 0; i < 7; i++) { const g = G(iso(new Date(Date.now() - i * 864e5))); if (g) t += (g.imMod || 0) + 2 * (g.imVig || 0); } return t; };
+function recoveryCard() {
+  if (!db.garmin || !db.garmin.length) return "";
+  const g = [...db.garmin].reverse().find(r => r.bbHigh != null || r.deep != null); if (!g) return "";
+  const tile = (val, lab, sub) => `<div class="tile"><span>${lab}</span><b>${val}</b>${sub ? `<small>${sub}</small>` : ""}</div>`;
+  const st = [["Deep", g.deep, "--s1"], ["Light", g.light, "--s2"], ["REM", g.rem, "--good"], ["Awake", g.awake, "--muted"]].filter(x => x[1]);
+  const tot = st.reduce((a, x) => a + x[1], 0) || 1, im = imWeek();
+  return `<div class="card"><h2>Recovery · Garmin</h2><div class="tiles">
+    ${tile(g.bbWake ?? "–", "Battery at wake", g.bbHigh != null ? `range ${g.bbLow}–${g.bbHigh}` : "")}
+    ${tile(g.stress ?? "–", "Stress avg", g.stress == null ? "" : g.stress < 26 ? "rest-level" : g.stress < 51 ? "low" : g.stress < 76 ? "medium" : "high")}
+    ${tile(im, "Intensity min", `last 7 days · goal 150`)}</div>
+    ${st.length ? `<div class="stages" role="img" aria-label="Sleep stages">${st.map(([n, v, c]) => `<i style="flex:${v};background:var(${c})" title="${n} ${hm(v)}"></i>`).join("")}</div>
+    <div class="legend">${st.map(([n, v, c]) => `<span><i style="background:var(${c})"></i>${n} ${hm(v)} · ${r0(v / tot * 100)}%</span>`).join("")}</div>
+    <p class="muted note">Bed ${clock(g.bed)} → up ${clock(g.wake)}. Adults usually get ~15–25% deep and ~20–25% REM.</p>` : ""}</div>`;
 }
 
 /* ---------- Commute ---------- */
@@ -559,14 +601,22 @@ function healthReport() {
     const m = mean(sl), v = sd(sl) * 60;
     h += bench("Sleep", m, hm(m * 3600), 4, 10, [[6, "Short"], [7, "Below"], [9, "7–9h", 1], [99, "Long"]],
       m >= 7 ? `Meets the 7h+ adult recommendation.` : `Under the 7h+ that sleep societies recommend for adults. Short sleep also shows up as higher next-morning resting HR (see below).`, ["watson"]);
-    h += bench("Sleep regularity", 150 - v, `±${r0(v)} min`, 0, 150, [[60, "Irregular"], [90, "Variable"], [120, "Regular"], [999, "Steady", 1]],
-      `Your nightly sleep length swings by ±${r0(v)} min (1 SD). A UK Biobank study found <b>regular</b> sleep predicted mortality better than <b>long</b> sleep. (The study used a stricter index; this is the app's approximation.)`, ["windred"]);
+    // With Garmin bed times: SD of bedtime (minutes, wrapped around midnight). Otherwise SD of sleep length.
+    const beds = (db.garmin || []).slice(-30).map(r => r.bed).filter(Boolean).map(ts => { const m = (ts / 6e4) % 1440; return m < 720 ? m + 1440 : m; });
+    const useBed = beds.length >= 7, vv = useBed ? sd(beds) : v;
+    h += bench("Sleep regularity", 150 - vv, `±${r0(vv)} min`, 0, 150, [[60, "Irregular"], [90, "Variable"], [120, "Regular"], [999, "Steady", 1]],
+      useBed ? `Your bedtime varies by ±${r0(vv)} min (1 SD, last ${beds.length} nights). A UK Biobank study found <b>regular</b> sleep timing predicted mortality better than <b>long</b> sleep.`
+        : `Your nightly sleep length swings by ±${r0(v)} min (1 SD). A UK Biobank study found <b>regular</b> sleep predicted mortality better than <b>long</b> sleep. (Approximation: add Garmin extras for real bed times.)`, ["windred"]);
   }
   // Activity minutes per week from logged rides (last 4 weeks)
   const rides = db.acts.filter(isRide), since = iso(new Date(Date.now() - 28 * 864e5));
-  const min = rides.filter(a => a.date.slice(0, 10) >= since).reduce((s, a) => s + (a.time || 0), 0) / 60 / 4;
+  // Prefer Garmin intensity minutes (counts ALL activity: unlogged gym, runs, brisk walks); fall back to logged rides.
+  const gIM = db.garmin && db.garmin.filter(r => r.d >= since && (r.imMod != null || r.imVig != null));
+  const fromG = gIM && gIM.length >= 14;
+  const min = fromG ? gIM.reduce((s, r) => s + (r.imMod || 0) + 2 * (r.imVig || 0), 0) / gIM.length * 7
+    : rides.filter(a => a.date.slice(0, 10) >= since).reduce((s, a) => s + (a.time || 0), 0) / 60 / 4;
   h += bench("Cardio min / week", Math.min(min, 449), `${r0(min)} min`, 0, 450, [[75, "Low"], [150, "Some"], [300, "WHO target", 1], [999, "Extra"]],
-    `WHO: 150–300 min moderate a week plus strength twice. Only <b>logged</b> rides count here. Your plan (3 commute days × 2 legs) is ${commute.days.length * 2} rides a week; cycle-commuters had <b>41% lower</b> all-cause mortality than car/transit commuters.`, ["who", "celis"]);
+    `WHO: 150–300 min moderate a week plus strength twice. ${fromG ? "From Garmin intensity minutes (vigorous counts double), so unlogged gym and runs count too." : "Only <b>logged</b> rides count here."} Your plan (3 commute days × 2 legs) is ${commute.days.length * 2} rides a week; cycle-commuters had <b>41% lower</b> all-cause mortality than car/transit commuters.`, ["who", "celis"]);
   return h + `<p class="muted note">Associations from observational studies, not guarantees, and not medical advice.</p></div>` + statsCard();
 }
 
@@ -601,8 +651,9 @@ function statsCard() {
     <table><tr><th></th><th>Commute days</th><th>Other days</th></tr>
       <tr><td>Steps</td><td>${cS[0]}</td><td>${cS[1]}</td></tr><tr><td>Resting HR</td><td>${cR[0]}</td><td>${cR[1]}</td></tr>
       <tr><td>Sleep</td><td>${cL[0]}</td><td>${cL[1]}</td></tr></table>
-    <p class="muted note">Not measured by the Venu 2, so not analysed: HRV, training load from unlogged gym/runs.</p></div>`;
+    <p class="muted note">Not exported by the Venu 2: HRV (Body Battery is used instead when Garmin extras are connected).</p></div>`;
 }
+function fillGh() { $("#ghtok").value = ghTok; }
 function fillProfile() { $("#pAge").value = profile.age || ""; $("#pSex").value = profile.sex || ""; }
 function saveProfile() { profile = { age: +$("#pAge").value || null, sex: $("#pSex").value }; LS.set("gh.profile", profile); }
 
@@ -642,7 +693,11 @@ function demoData() {
     ctl += (load - ctl) / 42; atl += (load - atl) / 7;
     W.push({ d, ctl, atl, rhr: Math.round(52 + R() * 6 + (atl - ctl) / 6), hrv: Math.round(62 + R() * 16 - (atl - ctl) / 3), sleep: (5.4 + R() * 3) * 3600, sleepScore: Math.round(60 + R() * 35), steps: Math.round(5000 + R() * 9000), vo2: k % 7 ? null : 46 + (365 - k) / 120, weight: null });
   }
-  return { wellness: W, acts: A.reverse(), at: Date.now(), demo: true };
+  const garmin = W.map((w, k) => { const R2 = rng(k + 7), bed = Date.parse(w.d + "T00:00:00Z") - (60 + R2() * 90) * 6e4;
+    return { d: w.d, bbWake: Math.round(45 + R2() * 50), bbHigh: 100, bbLow: Math.round(5 + R2() * 25), stress: Math.round(18 + R2() * 25),
+      imMod: Math.round(R2() * 40), imVig: Math.round(R2() * 15), deep: 3600 + R2() * 2400, light: 12000 + R2() * 4000, rem: 4200 + R2() * 2400, awake: 600 + R2() * 1200,
+      bed, wake: bed + w.sleep * 1000, sleepStress: Math.round(12 + R2() * 14) }; });
+  return { wellness: W, acts: A.reverse(), garmin, at: Date.now(), demo: true };
 }
 function demoStreams(a) {
   const n = Math.round(a.time), R = rng(a.time | 0), time = [], hr = [], sp = [], ll = [];
@@ -716,7 +771,7 @@ function bootScreen() {
 function openSettings() {
   $("#key").value = cfg.key; $("#ath").value = cfg.athlete;
   $("#dataInfo").textContent = db ? `${db.demo ? "Demo data" : "Synced"}: ${db.wellness.length} days, ${db.acts.length} activities. Last sync ${new Date(db.at).toLocaleString()}.` : "Nothing stored.";
-  fillCommuteSettings(); fillProfile();
+  fillCommuteSettings(); fillProfile(); fillGh();
   $("#settings").classList.add("open");
 }
 function useDemo() { db = demoData(); LS.set("gh.db", db); $("#settings").classList.remove("open"); render(); }
@@ -732,6 +787,7 @@ document.addEventListener("click", e => {
   else if (t.id === "demoBtn" || t.id === "goDemo") useDemo();
   else if (t.dataset.cday) { t.classList.toggle("on"); saveCommute(); render(); }
   else if (t.dataset.skin) { skin = setSkin(t.dataset.skin); LS.set("gh.skin", skin); render(); }   // re-render: chart colours are read from CSS
+  else if (t.id === "ghSave") { ghTok = $("#ghtok").value.trim(); LS.set("gh.ghtok", ghTok); $("#settings").classList.remove("open"); if (db && !db.demo) sync(); }
   else if (t.id === "saveBtn") {
     cfg = { key: $("#key").value.trim(), athlete: $("#ath").value.trim() || "0" }; LS.set("gh.cfg", cfg);
     $("#settings").classList.remove("open"); if (db && db.demo) db = null; sync();
