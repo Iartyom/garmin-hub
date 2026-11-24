@@ -14,7 +14,28 @@ My own dashboard for Garmin Venu 2 data: the numbers Garmin Connect hides or nev
 | **Intervals.icu API** | ✅ **chosen** | Free, official personal API key. Intervals.icu auto-imports from Garmin (activities with full streams + wellness: sleep, resting HR, HRV, weight, steps) |
 | Manual FIT export | ✅ backup | Garmin Connect → activity → Export Original. The parser can read FIT files dropped into `data/fit/` |
 
-Flow: **Venu 2 → Garmin Connect → Intervals.icu (auto) → `sync.mjs` → `data/*.json` → `index.html` dashboard**.
+Flow: **Venu 2 → Garmin Connect app (phone) → Garmin cloud → Intervals.icu (auto) → this web app on the phone**.
+
+It's an installable web app (PWA): no app store, works on iPhone and Android. The phone fetches straight from
+the Intervals.icu API (CORS is allowed, checked Nov 24, 2026). The API key and synced data stay in the
+phone's browser storage only, so the code can be hosted publicly with no personal data in it.
+
+## Run / install
+
+- Try it: `node serve.mjs` → http://localhost:5174/?demo (demo data, no key needed).
+- Phone: host the files on HTTPS (GitHub Pages), open the page, then Share → **Add to Home Screen** (iPhone)
+  or ⋮ → **Install app** (Android). Settings (⚙) → paste the Intervals.icu API key.
+- Test links: `?demo#rides`, `?demo#fitness`, `?demo#sleep`, `?demo#ride` (opens the latest ride).
+
+## v1 (built)
+
+- **Today**: go hard / moderate / easy verdict from resting HR, HRV, sleep and form against your own 28-day baseline;
+  "watch hasn't synced" warning (the phone sync also refreshes GPS satellite data); body tiles; last ride.
+- **Rides**: weekly km (12 weeks) and ride list; ride detail with map, HR and speed charts, time in HR zones, HR drift.
+- **Fitness**: fitness/fatigue, form, VO2max (42 days / 90 days / 1 year), ramp-rate warning, table view.
+- **Sleep**: 30 nights, resting HR, HRV, and sleep vs ride efficiency (km/h per heartbeat).
+
+The original phase plan below is kept for reference; the phone app replaced the local `sync.mjs` + dashboard idea.
 
 ## Plan
 

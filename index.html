@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Garmin Hub</title>
+<meta name="description" content="Personal Garmin dashboard: rides, fitness, sleep, from Intervals.icu.">
+<meta name="theme-color" content="#121212">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Garmin Hub">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+/* Tokens: light + dark, chart series from the validated reference palette (slots 1-2). */
+:root{
+  color-scheme: light;
+  --bg:#f4f4f2; --card:#fcfcfb; --line:#e2e1dc; --ink:#0b0b0b; --ink2:#52514e; --muted:#8a8984;
+  --s1:#2a78d6; --s2:#eb6834; --good:#1a8a2e; --warn:#b77900; --bad:#d23b3a; --accent:#2a78d6;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --bg:#121212; --card:#1c1c1b; --line:#2f2f2d; --ink:#f0efec; --ink2:#c3c2b7; --muted:#8d8c86;
+    --s1:#3987e5; --s2:#d95926; --good:#35b24a; --warn:#d9a020; --bad:#e66767; --accent:#3987e5;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --bg:#121212; --card:#1c1c1b; --line:#2f2f2d; --ink:#f0efec; --ink2:#c3c2b7; --muted:#8d8c86;
+  --s1:#3987e5; --s2:#d95926; --good:#35b24a; --warn:#d9a020; --bad:#e66767; --accent:#3987e5;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
+body{padding:env(safe-area-inset-top) 0 calc(64px + env(safe-area-inset-bottom))}
+header{display:flex;align-items:center;gap:8px;padding:14px 16px 6px}
+header h1{font-size:20px;margin:0;flex:1}
+button{font:inherit;color:inherit;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 12px;cursor:pointer}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.icon-btn{padding:6px 10px}
+#status{padding:0 16px;color:var(--muted);font-size:13px;min-height:18px}
+main{padding:8px 16px;max-width:720px;margin:0 auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+.card h2{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink2);margin:0 0 10px;font-weight:600}
+/* minmax(0,1fr): long values ("12,595") must shrink, not push the grid past the screen edge */
+.tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.tile{background:var(--bg);border-radius:10px;padding:10px;min-width:0;overflow:hidden}
+@media (max-width:380px){.tile b{font-size:19px}}
+.tile b{display:block;font-size:22px;font-variant-numeric:tabular-nums}
+.tile span{font-size:12px;color:var(--ink2)}
+.tile small{display:block;font-size:11px;color:var(--muted)}
+.verdict{display:flex;gap:12px;align-items:flex-start}
+.verdict .dot{flex:none;width:38px;height:38px;border-radius:50%;display:grid;place-items:center;font-weight:700;color:#fff;font-size:18px}
+.verdict h3{margin:0 0 4px;font-size:19px}
+.verdict ul{margin:4px 0 0;padding-left:18px;color:var(--ink2);font-size:14px}
+.warnbar{border-left:4px solid var(--warn);background:var(--card);padding:10px 12px;border-radius:8px;margin-bottom:12px;font-size:14px}
+.muted{color:var(--muted)}
+.row{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.ride{display:block;width:100%;text-align:left;margin-bottom:8px;padding:12px}
+.ride .t{font-weight:600}
+.ride .m{color:var(--ink2);font-size:13px;font-variant-numeric:tabular-nums}
+.chart{position:relative;width:100%;touch-action:pan-y}
+.chart svg{display:block;width:100%;overflow:visible}
+.chart .grid{stroke:var(--line);stroke-width:1}
+.chart .axis{fill:var(--muted);font-size:11px}
+.chart .end{fill:var(--ink2);font-size:11px}
+.chart .xhair{stroke:var(--muted);stroke-width:1}
+.tip{position:absolute;top:0;pointer-events:none;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:12px;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.18);display:none;z-index:2}
+.tip i{display:inline-block;width:10px;height:3px;border-radius:2px;vertical-align:middle;margin-right:5px}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--ink2);margin-bottom:6px}
+.legend i{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:middle;margin-right:5px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg button{border:0;border-radius:0;padding:5px 10px;font-size:13px;background:transparent}
+.seg button.on{background:var(--accent);color:#fff}
+.zones .z{display:grid;grid-template-columns:34px 1fr 54px;gap:8px;align-items:center;font-size:13px;margin:4px 0}
+.zones .bar{height:12px;border-radius:0 4px 4px 0;background:var(--s1)}
+#map{height:260px;border-radius:10px;margin-bottom:12px;background:var(--bg)}
+nav{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--card);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom);z-index:5}
+nav button{flex:1;border:0;border-radius:0;background:transparent;padding:10px 0 12px;font-size:12px;color:var(--muted)}
+nav button.on{color:var(--accent);font-weight:600}
+nav button svg{display:block;margin:0 auto 2px;width:22px;height:22px}
+.sheet{position:fixed;inset:0;background:var(--bg);z-index:10;overflow:auto;padding:env(safe-area-inset-top) 0 24px;display:none}
+.sheet.open{display:block}
+label{display:block;font-size:13px;color:var(--ink2);margin:12px 0 4px}
+input{width:100%;font:inherit;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink)}
+table{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+td,th{padding:4px 6px;border-bottom:1px solid var(--line);text-align:right}
+td:first-child,th:first-child{text-align:left}
+details summary{cursor:pointer;color:var(--ink2);font-size:13px;margin-top:8px}
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title">Today</h1>
+  <button class="icon-btn" id="syncBtn" aria-label="Sync">⟳ Sync</button>
+  <button class="icon-btn" id="setBtn" aria-label="Settings">⚙</button>
+</header>
+<div id="status"></div>
+<main id="view"></main>
+
+<nav id="tabs">
+  <button data-tab="today" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/></svg>Today</button>
+  <button data-tab="rides"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="16" r="4"/><circle cx="18" cy="16" r="4"/><path d="M6 16l4-8h5l3 8M10 8l2 8h-6"/></svg>Rides</button>
+  <button data-tab="fitness"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l5-5 4 3 8-9"/></svg>Fitness</button>
+  <button data-tab="sleep"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 15A8 8 0 0 1 9 4a8 8 0 1 0 11 11z"/></svg>Sleep</button>
+</nav>
+
+<!-- Settings: API key stays in this phone's browser storage only. -->
+<div class="sheet" id="settings">
+  <header><h1>Settings</h1><button id="setClose">Done</button></header>
+  <main>
+    <div class="card">
+      <h2>Intervals.icu connection</h2>
+      <p class="muted">Garmin Connect → Intervals.icu → this app. In Intervals.icu: Settings → Connections → link Garmin; then Settings → Developer Settings for the key and athlete ID.</p>
+      <label for="key">API key</label>
+      <input id="key" type="password" autocomplete="off" spellcheck="false">
+      <label for="ath">Athlete ID (e.g. i12345; 0 = the key's owner)</label>
+      <input id="ath" autocomplete="off" spellcheck="false">
+      <p><button class="primary" id="saveBtn">Save &amp; sync</button> <button id="demoBtn">Try demo data</button></p>
+      <p class="muted">Your key and data stay on this phone. The app only talks to intervals.icu.</p>
+    </div>
+    <div class="card">
+      <h2>Data</h2>
+      <p class="muted" id="dataInfo"></p>
+      <button id="clearBtn">Clear stored data</button>
+    </div>
+  </main>
+</div>
+
+<!-- Ride detail sheet -->
+<div class="sheet" id="rideSheet">
+  <header><h1 id="rideTitle">Ride</h1><button id="rideClose">Back</button></header>
+  <main id="rideBody"></main>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
