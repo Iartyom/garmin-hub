@@ -279,7 +279,7 @@ function renderToday(v) {
     h += `<div class="card"><h2>${T("readiness")} · ${short(R.last.d)}</h2><div class="verdict${stack ? " stack" : ""}">${widget}<div><h3 class="type" style="color:${col}">${T(R.level)}</h3>
       ${R.drivers && R.drivers.length ? `<p class="muted" style="margin:2px 0 0">${(() => { const w = [...R.drivers].sort((a, b) => a[1] - b[1])[0]; return R.flags.length ? esc(R.flags[0]) : w && w[1] < -3 ? `Main drag: ${esc(w[0].toLowerCase())}` : "Nothing pulling you down."; })()}</p>` : `<ul>${notes.join("")}${R.flags.map(f => `<li class="flag">${esc(f)}</li>`).join("")}${R.good.map(f => `<li>${esc(f)}</li>`).join("")}</ul>`}</div></div>
       ${R.drivers && R.drivers.length ? driversHtml(R.drivers) : ""}
-      <div class="plan"><span>${T("plan")}</span><span class="type" style="all:unset">${esc(suggestion(R.level, rides))}</span></div></div>`;
+      ${commute.days.includes(new Date().getDay()) ? "" : `<div class="plan"><span>${T("plan")}</span><span class="type" style="all:unset">${esc(suggestion(R.level, rides))}</span></div>`}</div>`;
   }
   // Engine: fitness read from the BODY, so it includes the running/gym that was never logged.
   const vo = W.filter(x => x.vo2), voNow = vo.at(-1), vo90 = vo.find(x => daysAgo(x.d) <= 90);
@@ -287,16 +287,6 @@ function renderToday(v) {
   const sl7 = avgDays(W, "sleep", 0, 6), sl14 = avgDays(W, "sleep", 7, 13), w = latest || {};
   h += commuteCard(R ? R.level : "calib", rides);
   h += normalCard() + insightsCard();
-  // Riding progress: you're new to the bike, so track the first-months curve (distance, speed, longest).
-  if (rides.length) {
-    const tot = rides.reduce((s, a) => s + (a.dist || 0), 0), longest = Math.max(...rides.map(a => a.dist || 0));
-    const wk = rides.filter(a => daysAgo(a.date.slice(0, 10)) < 7), wkKm = wk.reduce((s, a) => s + (a.dist || 0), 0), wkT = wk.reduce((s, a) => s + (a.time || 0), 0);
-    const last = rides[0], prev = rides.slice(1, 11).filter(a => a.spd), avgPrev = prev.length ? mean(prev.map(a => a.spd)) : null;
-    const tile = (val, lab, sub) => `<div class="tile"><span>${lab}</span><b>${val}</b>${sub ? `<small>${sub}</small>` : ""}</div>`;
-    h += `<div class="card"><h2>${T("riding")}</h2><div class="tiles">
-      ${tile(wk.length, T("week"), `${km(wkKm)} km · ${hm(wkT)}`)}${tile(rides.length, T("nRides"), `${km(tot)} km total`)}${tile(km(longest), T("longest"), "km")}
-    </div>${rideButton(last)}${avgPrev ? `<p class="muted note">Last ride ${kmh(last.spd)} km/h vs your recent average ${kmh(avgPrev)} km/h (${last.spd >= avgPrev ? "▲ faster" : "▼ slower"}).</p>` : ""}</div>`;
-  }
   v.innerHTML = h;
 }
 // 20-cell ASCII bar, filled to the score (terminal skin).
@@ -354,7 +344,7 @@ function driversHtml(D) {
     const w = Math.abs(v) / mx * 50, pos = v >= 0;
     return `<div class="drv"${tipAttr(`${k}: ${det} → ${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(1)} pts`)}><span>${esc(k)}<small>${esc(det)}</small></span>
       <div class="dbar"><i class="${pos ? "pos" : "neg"}" style="${pos ? "left:50%" : `left:${50 - w}%`};width:${Math.max(w, .8)}%"></i></div><b class="${pos ? "up-good" : "up-bad"}">${pos ? "+" : "−"}${Math.abs(v).toFixed(0)}</b></div>`; }).join("")}
-    <p class="muted note">Points vs a neutral 70. Tap a row for detail.</p></div>`;
+    </div>`;
 }
 // Sparkline with your personal normal band (mean ± 1 SD of the 28 days before today) and today's dot.
 // vals = [[date, value]...] oldest→newest; fmt formats a value for tooltips.
@@ -390,7 +380,7 @@ function normalCard() {
     db.garmin ? normalRow("Stress (day avg)", series(30, d => G(d)?.stress || null), v => r0(v), true) : "",
     normalRow("Steps", series(30, d => n(d).steps || null), v => r0(v).toLocaleString(), false),
   ].join("");
-  return rows ? `<div class="card"><h2>${T("normal")}</h2>${rows}<p class="muted note">Shaded band = your usual range (average ± 1 SD of the previous 28 days). Outside it is worth noticing; inside is just you.</p></div>` : "";
+  return rows ? `<div class="card"><h2>${T("normal")}</h2>${rows}<p class="muted note">Shaded band = your usual range over the previous 28 days.</p></div>` : "";
 }
 // Insights: split your own days into two groups and keep only differences that pass a Welch t-test (|t| > 2, n ≥ 6 each).
 function welch(a, b) { if (a.length < 6 || b.length < 6) return null; const t = (mean(a) - mean(b)) / Math.sqrt(sd(a) ** 2 / a.length + sd(b) ** 2 / b.length); return Math.abs(t) > 2 ? t : null; }
@@ -405,7 +395,7 @@ function insightsCard() {
       <div class="cmp"${tipAttr(`${la}: ${fmt(ma)}${unit} (${a.length} days) · ${lb}: ${fmt(mb)}${unit} (${b.length} days)`)}>
         <div><span>${la}</span><i style="width:${(ma / mx * 100).toFixed(0)}%"></i><b>${fmt(ma)}${unit}</b></div>
         <div><span>${lb}</span><i class="b" style="width:${(mb / mx * 100).toFixed(0)}%"></i><b>${fmt(mb)}${unit}</b></div></div>
-      <small class="muted">${a.length} vs ${b.length} days · t = ${t.toFixed(1)}</small></div>` }); };
+      <small class="muted">${a.length} vs ${b.length} days</small></div>` }); };
   // 1) earlier bedtime → Body Battery at wake
   const bedRows = gx.filter(r => r.bed && r.bbWake != null), med = bedRows.length ? bedRows.map(r => bedMin(r.bed)).sort((x, y) => x - y)[bedRows.length >> 1] : 0;
   add(`Going to bed before <b>${hhmm(med)}</b> (your median) changes how charged you wake up.`, `Before ${hhmm(med)}`, bedRows.filter(r => bedMin(r.bed) < med).map(r => r.bbWake),
@@ -428,8 +418,8 @@ function insightsCard() {
     "Other", cs.filter(r => !commute.days.includes(parseDay(r.d).getDay())).map(r => r.stress), r0, "");
   out.sort((a, b) => b.t - a.t);
   return `<div class="card"><h2>${T("insights")}</h2>${out.length ? out.slice(0, 4).map(o => o.html).join("")
-    : `<p class="muted">No pattern is strong enough yet to rule out chance. ${db.garmin ? "Keeps checking as nights accumulate." : "Connect Garmin extras in Settings for bedtime, Body Battery and stress patterns."}</p>`}
-    <p class="muted note">Only differences that pass a significance test (Welch t, |t| &gt; 2) are shown. Patterns, not proof of cause.</p></div>`;
+    : `<p class="muted">${db.garmin ? "No pattern strong enough yet." : "Connect Garmin extras in Settings to unlock this."}</p>`}
+    <p class="muted note">Only differences unlikely to be chance. Patterns, not proof of cause.</p></div>`;
 }
 // Sleep timing: one floating bar per night from bedtime to wake on a clock axis (20:00 → 11:00), median bedtime marked.
 function sleepTimingCard(n = 21) {
@@ -440,10 +430,11 @@ function sleepTimingCard(n = 21) {
   const bars = rows.map((r, i) => { const b = bedMin(r.bed), w = b + (r.wake - r.bed) / 6e4, y = i * rh + 2;
     return `<text x="${L - 6}" y="${y + 9}" class="axis" text-anchor="end">${short(r.d)}</text><rect x="${x(b).toFixed(1)}" y="${y}" width="${Math.max(2, x(Math.min(w, A1)) - x(b)).toFixed(1)}" height="${rh - 4}" rx="4" class="sbar"${tipAttr(`${short(r.d)}: ${hhmm(b)} → ${hhmm(w)} · ${hm((r.wake - r.bed) / 1000)}`)}/>`; }).join("");
   const sdv = sd(bm);
-  return `<div class="card"><h2>Sleep timing</h2><p class="muted" style="margin:0 0 6px">Median bedtime ${hhmm(med)} · varies ±${r0(sdv)} min</p>
+  const dur = rows.map(r => (r.wake - r.bed) / 1000);
+  return `<div class="card"><h2>Sleep timing</h2><p class="muted" style="margin:0 0 6px">Average ${hm(mean(dur))} · bed ${hhmm(med)} ±${r0(sdv)} min · ${dur.filter(x => x < 6 * 3600).length} short nights</p>
     <svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Bed and wake times">${ticks}${bars}
       <line x1="${x(med).toFixed(1)}" x2="${x(med).toFixed(1)}" y1="0" y2="${H - 18}" class="medl"/></svg>
-    <p class="muted note">Each bar is one night, bed to wake. Dashed line = your median bedtime. Steadier bars = more regular sleep.</p></div>`;
+    <p class="muted note">One bar per night, bed → wake. Dashed = usual bedtime.</p></div>`;
 }
 // Sleep stages: stacked columns per night (deep at the base), hours axis, legend + tooltips.
 function stagesCard(n = 21) {
@@ -458,7 +449,7 @@ function stagesCard(n = 21) {
   return `<div class="card"><h2>Sleep stages</h2><div class="legend">${S.map(([nm, k, c]) => `<span><i class="${c}"></i>${nm} ${r0(avg(k) / tot * 100)}%</span>`).join("")}</div>
     <svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Sleep stages per night">${grid}${cols}
       <text x="${L}" y="${H - 4}" class="axis">${short(rows[0].d)}</text><text x="${W}" y="${H - 4}" class="axis" text-anchor="end">${short(rows[rows.length - 1].d)}</text></svg>
-    <p class="muted note">Averages over ${rows.length} nights. Typical adults: ~15–25% deep, ~20–25% REM.</p></div>`;
+    <p class="muted note">Typical adult: 15–25% deep, 20–25% REM.</p></div>`;
 }
 // Body Battery: daily low→high range bar with a dot at wake. One axis (0–100).
 function batteryCard(n = 30) {
@@ -488,7 +479,7 @@ function intensityCard() {
       <line x1="${L}" x2="${W}" y1="${y(0)}" y2="${y(0)}" class="grid"/>${bars}
       <line x1="${L}" x2="${W}" y1="${y(150).toFixed(1)}" y2="${y(150).toFixed(1)}" class="medl"/><text x="${L - 4}" y="${(y(150) + 3).toFixed(1)}" class="axis" text-anchor="end">150</text>
       <text x="${L}" y="${H - 4}" class="axis">${short(wk[0])}</text><text x="${W}" y="${H - 4}" class="axis" text-anchor="end">${short(wk[wk.length - 1])}</text></svg>
-    <p class="muted note">Counts everything the watch saw, logged or not. Solid bars reached 150.</p></div>`;
+    <p class="muted note">Everything the watch saw, logged or not. Dashed line = WHO 150.</p></div>`;
 }
 
 /* ---------- Garmin extras on Today ---------- */
@@ -588,6 +579,11 @@ function workoutButton(a) {
   return `<button class="ride" data-ride="${esc(a.id)}"><div class="row"><span class="t"><span class="kind k-${k}">${kindName(k)}</span> ${esc(a.name || a.type)}</span><span class="muted">${dayName(a.date)}</span></div>
     <div class="m">${meta}</div></button>`;
 }
+// List split by month with a session count + total time per header, so a long year stays scannable.
+function monthGroups(list) {
+  const by = []; list.forEach(a => { const m = a.date.slice(0, 7); if (!by.length || by[by.length - 1][0] !== m) by.push([m, []]); by[by.length - 1][1].push(a); });
+  return by.map(([m, xs]) => `<h3 class="mhead"><span>${new Date(m + "-15").toLocaleDateString([], { month: "long", year: "numeric" })}</span><small>${xs.length} · ${hm(xs.reduce((t, a) => t + (a.time || 0), 0))}</small></h3>${xs.map(workoutButton).join("")}`).join("");
+}
 function renderRides(v) {
   const all = db.acts, present = KINDS.map(k => k[0]).filter(k => all.some(a => kindOf(a) === k)).concat(all.some(a => kindOf(a) === "other") ? ["other"] : []);
   if (wkFilter !== "all" && !present.includes(wkFilter)) wkFilter = "all";
@@ -604,10 +600,13 @@ function renderRides(v) {
   const kmW = list.filter(a => weekStart(a.date) === mon).reduce((t, a) => t + (a.dist || 0), 0);
   v.innerHTML = `<div class="chips">${["all", ...present].map(k => `<button data-wk="${k}" class="${k === wkFilter ? "on" : ""}">${k === "all" ? "All" : kindName(k)} <small>${k === "all" ? all.length : all.filter(a => kindOf(a) === k).length}</small></button>`).join("")}</div>
     <div class="card"><h2>Training time per week</h2>
-      <p class="muted" style="margin:0 0 6px">This week ${hm(thisWeek * 60)} · ${nWeek} session${nWeek === 1 ? "" : "s"}${kmW ? ` · ${km(kmW)} km` : ""} · 11-week average ${hm(avg * 60)}</p>
+      <p class="muted" style="margin:0 0 6px">This week ${hm(thisWeek * 60)} · ${nWeek} session${nWeek === 1 ? "" : "s"}${kmW ? ` · ${km(kmW)} km` : ""} · usual ${hm(avg * 60)}</p>
       <div id="wkChart"></div>
-      ${im != null ? `<p class="note">Garmin counted <b>${im} intensity min</b> in the last 7 days. You logged ${r0(log7)} min. ${im > log7 + 30 ? "The gap is training that wasn't recorded as an activity." : "That roughly matches."}</p>` : ""}</div>
-    <div class="card"><h2>${wkFilter === "all" ? "All workouts" : kindName(wkFilter)} (${list.length} in the last year)</h2>${list.slice(0, 80).map(workoutButton).join("") || `<p class="muted">Nothing synced yet. Start an activity on the watch and it shows up here after Garmin Connect syncs.</p>`}</div>`;
+      ${im != null && im > log7 + 30 ? `<p class="note">Watch counted <b>${im} intensity min</b> this week vs ${r0(log7)} min recorded: some training wasn't saved as an activity.</p>` : ""}</div>
+    ${wkFilter === "ride" && list.length ? (() => { const tot = list.reduce((t, a) => t + (a.dist || 0), 0), lg = Math.max(...list.map(a => a.dist || 0)), sp = list.slice(1, 11).filter(a => a.spd), l = list[0];
+      const tile = (val, lab) => `<div class="tile"><span>${lab}</span><b>${val}</b></div>`;
+      return `<div class="card"><div class="tiles">${tile(km(tot), "km this year")}${tile(km(lg), "Longest km")}${tile(kmh(l.spd), "Last km/h")}${sp.length ? tile(kmh(mean(sp.map(a => a.spd))), "Usual km/h") : ""}</div></div>`; })() : ""}
+    <div class="card"><h2>${wkFilter === "all" ? "All workouts" : kindName(wkFilter)} · ${list.length}</h2>${monthGroups(list.slice(0, 120)) || `<p class="muted">Nothing synced yet. Start an activity on the watch and it shows up here after Garmin Connect syncs.</p>`}</div>`;
   barChart($("#wkChart"), { x: wk, values: wk.map(w => minBy[w]), color: css("--s1"), label: "Time", fmt: v => v >= 60 ? (v / 60).toFixed(v >= 600 ? 0 : 1) + "h" : r0(v) + "m", tipFmt: v => hm(v * 60),
     xLabel: w => short(w), tipLabel: w => "Week of " + short(w) });
 }
@@ -681,20 +680,29 @@ function renderFitness(v) {
   const W = db.wellness.filter(w => w.ctl != null).slice(-fitRange);
   const last = W[W.length - 1], wk = W[W.length - 8];
   const ramp = last && wk ? last.ctl - wk.ctl : null;
-  v.innerHTML = batteryCard() + intensityCard() + healthReport() + `<div class="row" style="margin-bottom:10px"><span class="muted">Range</span><div class="seg">${[42, 90, 365].map(r => `<button data-range="${r}" class="${r === fitRange ? "on" : ""}">${r === 365 ? "1 year" : r + " days"}</button>`).join("")}</div></div>
-    ${ramp != null && ramp > 8 ? `<div class="warnbar"><b>Fitness rose ${ramp.toFixed(1)} in a week.</b> Above ~8/week is the usual path to overtraining or getting sick. Add an easy day.</div>` : ""}
-    <div class="card"><h2>Fitness &amp; fatigue</h2><div id="ffC"></div>
-      <p class="muted" style="font-size:13px">Fitness = 6-week average training load. Fatigue = last week's. Built from heart rate, since the Venu 2 has no power meter support.</p></div>
-    <div class="card"><h2>Form (fitness − fatigue)</h2><div id="formC"></div>
-      <p class="muted" style="font-size:13px">Below −25: deep fatigue. −10 to −25: building. Above +5: fresh, a good day to test yourself.</p></div>
+  // Fitness/fatigue come from LOGGED training load only; with few logged sessions they're flat lines that mislead, so hide them
+  // (same 8-in-42-days rule readiness uses).
+  const enough = db.acts.filter(a => a.load && daysAgo(a.date.slice(0, 10)) <= 42).length >= 8;
+  const V = db.wellness.slice(-fitRange);
+  v.innerHTML = healthReport() + intensityCard() + batteryCard() + `<div class="row" style="margin-bottom:10px"><span class="muted">Range</span><div class="seg">${[42, 90, 365].map(r => `<button data-range="${r}" class="${r === fitRange ? "on" : ""}">${r === 365 ? "1 year" : r + " days"}</button>`).join("")}</div></div>
+    ${enough && ramp != null && ramp > 8 ? `<div class="warnbar"><b>Fitness rose ${ramp.toFixed(1)} in a week.</b> Above ~8/week is the usual path to overtraining or getting sick. Add an easy day.</div>` : ""}
+    <div class="card"><h2>Resting HR</h2><div id="rhC"></div></div>
     <div class="card"><h2>VO2max</h2><div id="voC"></div></div>
-    <details><summary>Show as table</summary><table><tr><th>Date</th><th>Fitness</th><th>Fatigue</th><th>Form</th></tr>
-      ${W.slice(-30).reverse().map(w => `<tr><td>${short(w.d)}</td><td>${r0(w.ctl)}</td><td>${r0(w.atl)}</td><td>${r0(w.ctl - w.atl)}</td></tr>`).join("")}</table></details>`;
+    ${enough ? `<div class="card"><h2>Fitness &amp; fatigue</h2><div id="ffC"></div>
+      <p class="muted note">Fitness = 6-week training load, fatigue = 1-week. From recorded workouts only.</p></div>
+    <div class="card"><h2>Form (fitness − fatigue)</h2><div id="formC"></div>
+      <p class="muted note">Below −25 deep fatigue · above +5 fresh.</p></div>` : ""}
+    ${statsCard()}
+    ${enough ? `<details><summary>Show as table</summary><table><tr><th>Date</th><th>Fitness</th><th>Fatigue</th><th>Form</th></tr>
+      ${W.slice(-30).reverse().map(w => `<tr><td>${short(w.d)}</td><td>${r0(w.ctl)}</td><td>${r0(w.atl)}</td><td>${r0(w.ctl - w.atl)}</td></tr>`).join("")}</table></details>` : ""}`;
+  lineChart($("#rhC"), { x: V.map(w => w.d), series: [{ name: "Resting HR", color: css("--s1"), values: V.map(w => w.rhr || null) }], height: 120 });
+  // VO2max updates only every few days; nulls between would break the line into invisible dots, so plot measured days only.
+  const VV = V.filter(w => w.vo2);
+  lineChart($("#voC"), { x: VV.map(w => w.d), series: [{ name: "VO2max", color: css("--s1"), values: VV.map(w => w.vo2) }], height: 120 });
+  if (!enough) return;
   const x = W.map(w => w.d);
   lineChart($("#ffC"), { x, series: [{ name: "Fitness", short: "Fit", color: css("--s1"), values: W.map(w => w.ctl) }, { name: "Fatigue", short: "Fat", color: css("--s2"), values: W.map(w => w.atl) }] });
   lineChart($("#formC"), { x, series: [{ name: "Form", color: css("--s1"), values: W.map(w => w.ctl - w.atl) }], zero: true, height: 130 });
-  const V = db.wellness.slice(-fitRange);
-  lineChart($("#voC"), { x: V.map(w => w.d), series: [{ name: "VO2max", color: css("--s1"), values: V.map(w => w.vo2 || null) }], height: 120 });
 }
 
 /* ---------- Health report: your numbers vs published research ---------- */
@@ -739,19 +747,11 @@ function linreg(pts) {
   const res = pts.reduce((s, [x, y]) => s + (y - (my + b * (x - mx))) ** 2, 0);
   const se = Math.sqrt(res / (n - 2) / sxx); return { b, ci: tcrit(n - 2) * se, n };
 }
-// Pearson r with a significance flag (t-test on r).
-function pearson(pts) {
-  const n = pts.length; if (n < 10) return null;
-  const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]), mx = mean(xs), my = mean(ys);
-  const r = pts.reduce((s, [x, y]) => s + (x - mx) * (y - my), 0) / Math.sqrt(xs.reduce((s, x) => s + (x - mx) ** 2, 0) * ys.reduce((s, y) => s + (y - my) ** 2, 0));
-  const t = r * Math.sqrt((n - 2) / Math.max(1e-9, 1 - r * r)); return { r, n, sig: Math.abs(t) > tcrit(n - 2) };
-}
-const rWord = r => { const a = Math.abs(r); return a < .1 ? "no" : a < .3 ? "a weak" : a < .5 ? "a moderate" : "a strong"; };
 
 function healthReport() {
   const W = db.wellness, P = prof(), last = n => W.slice(-n);
   const vals = (arr, f) => arr.map(f).filter(x => x != null && x > 0);
-  let h = `<div class="card"><h2>Health report · vs research</h2>`;
+  let h = `<div class="card"><h2>You vs research</h2>`;
   if (!P.age || !P.sex) h += `<div class="warnbar">Add your <b>age and sex</b> in Settings → Profile. VO2max and step targets depend on both.</div>`;
   // VO2max
   const vo = [...W].reverse().find(w => w.vo2);
@@ -760,37 +760,36 @@ function healthReport() {
     if (N) {
       const labs = ["Poor", "Fair", "Good", "Excellent", "Superior"], k = N.filter(c => v >= c).length, nextC = N[k];
       h += bench("VO2max", v, v.toFixed(0), N[0] - 8, N[3] + 6, [[N[0], "Poor"], [N[1], "Fair"], [N[2], "Good"], [N[3], "Excel."], [99, "Super.", 1]],
-        `<b>${labs[k]}</b> for your age and sex${nextC ? `, ${(nextC - v).toFixed(1)} below ${labs[k + 1]}` : ""}. Each +3.5 (one MET) is tied to about <b>13% lower risk of death</b> from any cause. The Venu 2 estimates this from walks/runs with HR, so trust the trend more than the number.`, ["cooper", "kodama"]);
-    } else h += bench("VO2max", null, v.toFixed(0), 25, 60, [[35, ""], [45, ""], [99, ""]], "Add age and sex to place this against population norms. Each +3.5 (one MET) ≈ 13% lower all-cause mortality.", ["kodama"]);
+        `<b>${labs[k]}</b> for your age${nextC ? ` · ${(nextC - v).toFixed(1)} to ${labs[k + 1]}` : ""}. Each +3.5 ≈ <b>13% lower</b> all-cause mortality.`, ["cooper", "kodama"]);
+    } else h += bench("VO2max", null, v.toFixed(0), 25, 60, [[35, ""], [45, ""], [99, ""]], "Add age in Settings to rank this. Each +3.5 ≈ 13% lower all-cause mortality.", ["kodama"]);
   }
   // Resting HR (30-day mean)
   const rh = vals(last(30), w => w.rhr);
   if (rh.length >= 5) {
     const m = mean(rh);
     h += bench("Resting HR", m, `${m.toFixed(0)} bpm`, 35, 95, [[50, "Athletic", 1], [60, "Low"], [80, "Mid"], [99, "High"]],
-      m < 60 ? `In the lowest-risk band. In the meta-analysis, 60–80 bpm carried <b>+12%</b> and over 80 bpm <b>+45%</b> mortality risk vs the lowest group.`
-        : `Every 10 bpm higher was tied to <b>+9%</b> all-cause mortality. Getting under 60 is realistic with 2–3 cardio sessions a week (your commute counts).`, ["zhang"]);
+      m < 60 ? `<b>Lowest-risk band.</b> 60–80 bpm carries +12%, over 80 +45%.`
+        : `Each +10 bpm ≈ <b>+9%</b> all-cause mortality. Regular cardio (your commute) brings it down.`, ["zhang"]);
   }
   // Steps (30-day mean); plateau depends on age
   const st = vals(last(30), w => w.steps);
   if (st.length >= 5) {
     const m = mean(st), old = (P.age || 0) >= 60, a = old ? 6000 : 8000, b = old ? 8000 : 10000;
     h += bench("Steps / day", m, r0(m).toLocaleString(), 0, 14000, [[4000, "Low"], [a, "Gaining"], [b, "Plateau", 1], [99, "Beyond"]],
-      m >= a ? `In the range where the mortality benefit levels off (${(a / 1000)}–${b / 1000}k for your age). More steps still help fitness, not much more longevity.`
-        : `Risk kept dropping up to <b>${a / 1000}–${b / 1000}k</b> steps for your age. ${r0(a - m).toLocaleString()} more a day gets you there.`, ["paluch"]);
+      m >= a ? `<b>At the plateau</b> (${a / 1000}–${b / 1000}k): more steps add fitness, little longevity.`
+        : `Benefit keeps rising to <b>${a / 1000}k</b>: ${r0(a - m).toLocaleString()} more a day.`, ["paluch"]);
   }
   // Sleep duration + regularity (30 nights)
   const sl = vals(last(30), w => w.sleep).map(x => x / 3600);
   if (sl.length >= 7) {
     const m = mean(sl), v = sd(sl) * 60;
     h += bench("Sleep", m, hm(m * 3600), 4, 10, [[6, "Short"], [7, "Below"], [9, "7–9h", 1], [99, "Long"]],
-      m >= 7 ? `Meets the 7h+ adult recommendation.` : `Under the 7h+ that sleep societies recommend for adults. Short sleep also shows up as higher next-morning resting HR (see below).`, ["watson"]);
+      m >= 7 ? `<b>Meets</b> the 7h+ adult recommendation.` : `<b>Under</b> the recommended 7h+.`, ["watson"]);
     // With Garmin bed times: SD of bedtime (minutes, wrapped around midnight). Otherwise SD of sleep length.
     const beds = (db.garmin || []).slice(-30).map(r => r.bed).filter(Boolean).map(ts => { const m = (ts / 6e4) % 1440; return m < 720 ? m + 1440 : m; });
     const useBed = beds.length >= 7, vv = useBed ? sd(beds) : v;
     h += bench("Sleep regularity", 150 - vv, `±${r0(vv)} min`, 0, 150, [[60, "Irregular"], [90, "Variable"], [120, "Regular"], [999, "Steady", 1]],
-      useBed ? `Your bedtime varies by ±${r0(vv)} min (1 SD, last ${beds.length} nights). A UK Biobank study found <b>regular</b> sleep timing predicted mortality better than <b>long</b> sleep.`
-        : `Your nightly sleep length swings by ±${r0(v)} min (1 SD). A UK Biobank study found <b>regular</b> sleep predicted mortality better than <b>long</b> sleep. (Approximation: add Garmin extras for real bed times.)`, ["windred"]);
+      `${useBed ? "Bedtime" : "Sleep length"} varies ±${r0(vv)} min. <b>Regular</b> sleep predicted mortality better than <b>long</b> sleep.`, ["windred"]);
   }
   // Activity minutes per week from logged rides (last 4 weeks)
   const rides = db.acts.filter(isRide), since = iso(new Date(Date.now() - 28 * 864e5));
@@ -800,8 +799,8 @@ function healthReport() {
   const min = fromG ? gIM.reduce((s, r) => s + (r.imMod || 0) + 2 * (r.imVig || 0), 0) / gIM.length * 7
     : rides.filter(a => a.date.slice(0, 10) >= since).reduce((s, a) => s + (a.time || 0), 0) / 60 / 4;
   h += bench("Cardio min / week", Math.min(min, 449), `${r0(min)} min`, 0, 450, [[75, "Low"], [150, "Some"], [300, "WHO target", 1], [999, "Extra"]],
-    `WHO: 150–300 min moderate a week plus strength twice. ${fromG ? "From Garmin intensity minutes (vigorous counts double), so unlogged gym and runs count too." : "Only <b>logged</b> rides count here."} Your plan (3 commute days × 2 legs) is ${commute.days.length * 2} rides a week; cycle-commuters had <b>41% lower</b> all-cause mortality than car/transit commuters.`, ["who", "celis"]);
-  return h + `<p class="muted note">Associations from observational studies, not guarantees, and not medical advice.</p></div>` + statsCard();
+    `WHO: 150–300 min a week${fromG ? " (watch intensity minutes, logged or not)" : " (recorded rides only)"}. Cycle-commuters had <b>41% lower</b> all-cause mortality.`, ["who", "celis"]);
+  return h + `<p class="muted note">From observational studies; not medical advice.</p></div>`;
 }
 
 // Statistics on your own data: 90-day trends with 95% CIs, correlations, commute vs other days.
@@ -814,28 +813,20 @@ function statsCard() {
     return `<tr><td>${lab}</td><td>${m >= 0 ? "+" : "−"}${Math.abs(m).toFixed(dec)} ${unit}/mo <span class="muted">±${ci.toFixed(dec)}</span></td>
       <td class="${sig ? (good ? "up-good" : "up-bad") : "muted"}">${sig ? (good ? "▲ improving" : "▼ worsening") : "no clear change"}</td></tr>`;
   };
-  // Pairs: same-night sleep → that morning's RHR; yesterday's steps → tonight's sleep.
-  const byD = Object.fromEntries(db.wellness.map(w => [w.d, w]));
-  const prev = d => { const p = parseDay(d); p.setDate(p.getDate() - 1); return byD[iso(p)]; };
-  const pr1 = pearson(W.filter(w => w.sleep && w.rhr).map(w => [w.sleep / 3600, w.rhr]));
-  const pr2 = pearson(W.filter(w => w.sleep && prev(w.d)?.steps).map(w => [prev(w.d).steps, w.sleep / 3600]));
-  const corr = (r, txt) => r ? `<li>${txt(r)} <span class="muted">(r = ${r.r.toFixed(2)}, ${r.n} days${r.sig ? ", significant" : ", could be chance"})</span></li>` : "";
   // Commute vs non-commute days (weekday-matched by the user's own commute setting)
   const isC = w => commute.days.includes(parseDay(w.d).getDay());
   const cmp = (f, fmt) => { const a = W.filter(isC).map(f).filter(v => v > 0), b = W.filter(w => !isC(w)).map(f).filter(v => v > 0);
     return a.length >= 4 && b.length >= 4 ? [fmt(mean(a)), fmt(mean(b))] : ["–", "–"]; };
   const cS = cmp(w => w.steps, v => r0(v).toLocaleString()), cR = cmp(w => w.rhr, v => v.toFixed(1)), cL = cmp(w => w.sleep, v => hm(v));
-  return `<div class="card"><h2>Your statistics · 90 days</h2>
+  return `<div class="card"><h2>Trends · 90 days</h2>
     <table><tr><th>Trend</th><th>Change</th><th></th></tr>
       ${trend("Resting HR", w => w.rhr, "bpm", 1, true)}${trend("VO2max", w => w.vo2, "", 2, false)}
       ${trend("Steps", w => w.steps, "", 0, false)}${trend("Sleep", w => w.sleep && w.sleep / 60, "min", 0, false)}</table>
-    <p class="muted note">Straight-line fit; ± is the 95% confidence interval. "No clear change" = the interval includes zero.</p>
-    <ul class="stats">${corr(pr1, r => `More sleep → ${r.r < 0 ? "lower" : "higher"} resting HR next morning: ${rWord(r.r)} link.`)}
-      ${corr(pr2, r => `More steps → ${r.r > 0 ? "longer" : "shorter"} sleep that night: ${rWord(r.r)} link.`)}</ul>
+    <p class="muted note">± = 95% confidence. "No clear change" = could be zero.</p>
     <table><tr><th></th><th>Commute days</th><th>Other days</th></tr>
       <tr><td>Steps</td><td>${cS[0]}</td><td>${cS[1]}</td></tr><tr><td>Resting HR</td><td>${cR[0]}</td><td>${cR[1]}</td></tr>
       <tr><td>Sleep</td><td>${cL[0]}</td><td>${cL[1]}</td></tr></table>
-    <p class="muted note">Not exported by the Venu 2: HRV (Body Battery is used instead when Garmin extras are connected).</p></div>`;
+</div>`;
 }
 function fillGh() { $("#ghtok").value = ghTok; }
 function fillProfile() { $("#pAge").value = profile.age || ""; $("#pSex").value = profile.sex || ""; }
@@ -852,13 +843,11 @@ function renderSleep(v) {
   const cmp = shortS.length >= 3 && longS.length >= 3 ? (() => { const a = mean(shortS), b = mean(longS), d = (a - b) / b * 100;
     return `<p>After short sleep (&lt;6.5h) you rode <b>${Math.abs(d).toFixed(0)}% ${d < 0 ? "less" : "more"} efficiently</b> (km/h per heartbeat) than after 7h+. <span class="muted">${shortS.length} vs ${longS.length} rides.</span></p>`; })()
     : `<p class="muted">Needs at least 3 rides after short sleep and 3 after a full night to compare.</p>`;
-  v.innerHTML = sleepTimingCard() + stagesCard() + `<div class="card"><h2>Sleep, last 30 nights</h2><p class="muted" style="margin:0 0 6px">Average ${have.length ? hm(mean(have) * 3600) : "–"} · under 6h on ${have.filter(x => x < 6).length} nights</p><div id="slC"></div></div>
-    <div class="card"><h2>Sleep vs your rides</h2>${cmp}</div>
-    <div class="card"><h2>Resting HR (bpm)</h2><div id="rhC"></div></div>
-    <div class="card"><h2>HRV (ms)</h2><div id="hvC"></div></div>`;
-  barChart($("#slC"), { x: W.map(w => w.d), values: S, color: css("--s1"), label: "Sleep", fmt: v => v.toFixed(0) + "h", tipFmt: v => hm(v * 3600) });
-  lineChart($("#rhC"), { x: W.map(w => w.d), series: [{ name: "Resting HR", color: css("--s1"), values: rh }], height: 120 });
-  lineChart($("#hvC"), { x: W.map(w => w.d), series: [{ name: "HRV", color: css("--s1"), values: hv }], height: 120 });
+  // Without Garmin bed times the timing chart is empty, so fall back to a plain duration bar chart.
+  const timing = sleepTimingCard();
+  v.innerHTML = (timing || `<div class="card"><h2>Sleep, last 30 nights</h2><p class="muted" style="margin:0 0 6px">Average ${have.length ? hm(mean(have) * 3600) : "–"} · under 6h on ${have.filter(x => x < 6).length} nights</p><div id="slC"></div></div>`)
+    + stagesCard() + (shortS.length >= 3 && longS.length >= 3 ? `<div class="card"><h2>Sleep vs your rides</h2>${cmp}</div>` : "");
+  if (!timing) barChart($("#slC"), { x: W.map(w => w.d), values: S, color: css("--s1"), label: "Sleep", fmt: v => v.toFixed(0) + "h", tipFmt: v => hm(v * 3600) });
 }
 
 /* ---------- demo data (so the app can be tried before Intervals.icu is set up) ---------- */
