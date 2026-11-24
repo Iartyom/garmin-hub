@@ -276,6 +276,40 @@ select{width:100%;font:14px var(--mono);padding:10px;border-radius:8px;border:1p
 /* sleep-stage strip (one row, proportional segments, 2px gaps) */
 .stages{display:flex;gap:2px;height:14px;margin:14px 0 8px;border-radius:4px;overflow:hidden}
 .stages i{display:block}
+/* tap/hover tooltip for any [data-tip] mark */
+#vtip{position:fixed;z-index:40;pointer-events:none;background:var(--card2);border:1px solid var(--line);border-radius:8px;padding:6px 9px;font:12px var(--mono);color:var(--ink);
+  box-shadow:0 6px 20px rgba(0,0,0,.35);display:none;max-width:260px}
+/* readiness drivers */
+.drivers{margin-top:6px}
+.drv{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) 34px;gap:8px;align-items:center;padding:5px 0}
+.drv span{font-size:13px;line-height:1.2}
+.drv small{display:block;color:var(--muted);font-size:11px}
+.dbar{position:relative;height:10px;background:linear-gradient(90deg,transparent calc(50% - .5px),var(--line) calc(50% - .5px) calc(50% + .5px),transparent calc(50% + .5px))}
+.dbar i{position:absolute;top:1px;bottom:1px;border-radius:4px}
+.dbar i.pos{background:var(--good)} .dbar i.neg{background:var(--bad)}
+.drv b{text-align:right;font:700 14px var(--mono)}
+/* normal-for-you rows */
+.nrow{padding:10px 0;border-top:1px solid var(--line)} .nrow:first-of-type{border-top:0;padding-top:0}
+.nhead{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:baseline}
+.nhead span{font-size:13px;color:var(--ink2)} .nhead b{font:700 18px var(--mono);text-align:right}
+.nhead em{grid-column:1/-1;font-style:normal;font-size:12px} .nhead em small{color:var(--muted)}
+.spark{display:block;width:100%;height:auto;margin-top:4px}
+.spark .band{fill:rgba(var(--acc-rgb),.12)} .spark .sl{fill:none;stroke:var(--s1);stroke-width:2;stroke-linejoin:round}
+.spark .sd{fill:var(--s1);stroke:var(--card);stroke-width:2}
+/* insights */
+.ins{padding:10px 0;border-top:1px solid var(--line)} .ins:first-of-type{border-top:0;padding-top:0}
+.ins p{margin:0 0 6px;font-size:13.5px;line-height:1.4}
+.cmp div{display:grid;grid-template-columns:86px 1fr 62px;gap:8px;align-items:center;margin:3px 0;font-size:12px}
+.cmp span{color:var(--ink2)} .cmp b{font:700 13px var(--mono);text-align:right}
+.cmp i{display:block;height:10px;border-radius:0 4px 4px 0;background:var(--s1)} .cmp i.b{background:var(--muted)}
+/* chart marks (sleep timing, stages, battery, intensity) */
+.chart .sbar{fill:var(--s1)} .chart .medl{stroke:var(--ink2);stroke-width:1;stroke-dasharray:3 3}
+.st-deep{fill:var(--s1);background:var(--s1)} .st-rem{fill:var(--s2);background:var(--s2)}
+.st-light{fill:rgba(var(--acc-rgb),.35);background:rgba(var(--acc-rgb),.35)} .st-awake{fill:var(--muted);background:var(--muted)}
+.bbr{fill:rgba(var(--acc-rgb),.35);background:rgba(var(--acc-rgb),.35)} .bbw{fill:var(--s2);stroke:var(--card);stroke-width:1.5;background:var(--s2)}
+.legend i.dot{width:8px;height:8px;border-radius:50%}
+.legend i[class^="st-"],.legend i.bbr{width:10px;height:10px;border-radius:3px}
+.imok{fill:var(--s1)} .imlo{fill:rgba(var(--acc-rgb),.3)}
 /* workouts: type chips + kind badge */
 .chips{display:flex;gap:6px;overflow-x:auto;padding:2px 2px 10px;scrollbar-width:none}
 .chips button{flex:none;padding:7px 12px;border-radius:999px;font-size:13px}
@@ -353,6 +387,7 @@ main .card:nth-child(2){animation-delay:.06s} main .card:nth-child(3){animation-
 </style>
 </head>
 <body>
+<div id="vtip" role="tooltip"></div>
 <div id="scene" aria-hidden="true"><i class="sun"></i><i class="mts"></i><i class="floor"></i></div>
 <header>
   <h1 id="title"><small>GARMIN·HUB</small>Today</h1>
