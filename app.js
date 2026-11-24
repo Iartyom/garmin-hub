@@ -18,16 +18,16 @@ let tab = LS.get("gh.tab", "today");
 const SKIN_BAR = { term: "#0b0d10", game: "#0b0d26", synth: "#0a0218", pro: "#f2f3f5" };
 // Per-skin vocabulary: the same screen speaks plain English, shell or RPG. Missing keys fall back to base.
 const WORDS = {
-  base: { todayWk: "Today's training", lastWk: "Last workout", normal: "Today vs your usual", insights: "What your data says", brand: "GARMIN·HUB", today: "Today", rides: "Workouts", fitness: "Fitness", sleep: "Sleep",
+  base: { tonight: "Tonight", todayWk: "Today's training", lastWk: "Last workout", normal: "Today vs your usual", insights: "What your data says", brand: "GARMIN·HUB", today: "Today", rides: "Workouts", fitness: "Fitness", sleep: "Sleep",
     readiness: "Readiness", plan: "Today's plan", engine: "Engine", riding: "Riding", vo2: "VO2max", rhr: "Resting HR", steps: "Steps/day",
     night: "Last night", sleepAvg: "Sleep avg", floors: "Floors", week: "This week", nRides: "Rides", longest: "Longest",
     hard: "Go hard", moderate: "Moderate", easy: "Take it easy", calib: "Calibrating" },
-  term: { todayWk: "tail today.log", lastWk: "tail last.log", normal: "diff --usual", insights: "grep --patterns", brand: "user@garmin-hub:~$", today: "./today", rides: "./workouts", fitness: "./fitness", sleep: "./sleep",
+  term: { tonight: "crontab -l | grep bed", todayWk: "tail today.log", lastWk: "tail last.log", normal: "diff --usual", insights: "grep --patterns", brand: "user@garmin-hub:~$", today: "./today", rides: "./workouts", fitness: "./fitness", sleep: "./sleep",
     readiness: "readiness --today", plan: "suggested_cmd", engine: "engine --from-body", riding: "rides --summary",
     vo2: "vo2max", rhr: "rest_hr", steps: "steps/day", night: "sleep_last", sleepAvg: "sleep_avg", floors: "floors",
     week: "this_week", nRides: "rides", longest: "longest",
     hard: "STATUS: GO HARD", moderate: "STATUS: MODERATE", easy: "STATUS: REST", calib: "STATUS: CALIBRATING" },
-  game: { todayWk: "Today's quest", lastWk: "Last quest", normal: "Status effects", insights: "Lore unlocked", brand: "PLAYER ONE", today: "Status", rides: "Quests", fitness: "Training", sleep: "Inn",
+  game: { tonight: "Rest at the inn", todayWk: "Today's quest", lastWk: "Last quest", normal: "Status effects", insights: "Lore unlocked", brand: "PLAYER ONE", today: "Status", rides: "Quests", fitness: "Training", sleep: "Inn",
     readiness: "HP", plan: "Next quest", engine: "Character stats", riding: "Quest log",
     vo2: "STA·VO2max", rhr: "DEF·Rest HR", steps: "AGI·Steps", night: "MANA·Sleep", sleepAvg: "MANA avg", floors: "Floors",
     week: "This week", nRides: "Quests", longest: "Longest",
@@ -117,7 +117,7 @@ function deriveLoad(d) {
   const by = {}; d.acts.forEach(a => { const day = a.date.slice(0, 10); by[day] = (by[day] || 0) + (a.load || 0); });
   let ctl = 0, atl = 0; d.wellness.forEach(w => { const l = by[w.d] || 0; ctl += (l - ctl) / 42; atl += (l - atl) / 7; w.ctl = ctl; w.atl = atl; });
 }
-const APP_VER = "v22";   // keep in step with CACHE in sw.js; shown after sync so it's obvious which build the phone runs
+const APP_VER = "v23";   // keep in step with CACHE in sw.js; shown after sync so it's obvious which build the phone runs
 async function sync() {
   if (!cfg.key) { openSettings(); return; }
   status("Syncing…");
@@ -235,6 +235,7 @@ function readiness() {
   if (!last) return null;
   const i = W.indexOf(last), base = W.slice(Math.max(0, i - 28), i);
   const flags = [], good = [];
+  { const e = db && earlyWarning(); if (e && e.level === "alert") flags.push("Early-warning signs", "Resting HR up two days"); }
   const rhrs = base.map(w => w.rhr).filter(Boolean), hrvs = base.map(w => w.hrv).filter(Boolean);
   if (last.rhr && rhrs.length >= 7) { const m = mean(rhrs), up = Math.max(3, sd(rhrs)); if (last.rhr > m + up) flags.push(`Resting HR ${last.rhr} (usual ${r0(m)})`); else good.push(`Resting HR normal (${last.rhr})`); }
   if (last.hrv && hrvs.length >= 7) { const m = mean(hrvs), dn = sd(hrvs); if (last.hrv < m - dn) flags.push(`HRV ${r0(last.hrv)} is low (usual ${r0(m)})`); else good.push(`HRV normal (${r0(last.hrv)})`); }
@@ -277,6 +278,7 @@ function renderToday(v) {
   let h = "";
   // Stale-data nudge: the phone sync is also what refreshes the watch's satellite data (faster GPS lock).
   if (latest && daysAgo(latest.d) >= 2) h += `<div class="warnbar"><b>Watch last synced ${daysAgo(latest.d)} days ago.</b> Open Garmin Connect on your phone and let it sync, which also refreshes GPS satellite data so your next ride locks faster. Then tap Sync here.</div>`;
+  h += warningCard();   // illness/overreaching banner sits above everything when it fires
   const rides = db.acts.filter(isRide);
   if (skin === "game") h += xpCard(rides);
   if (R) {
@@ -305,7 +307,7 @@ function renderToday(v) {
   { const td = iso(new Date()), todays = db.acts.filter(a => a.date.slice(0, 10) === td), list = todays.length ? todays : db.acts.slice(0, 1);
     if (list.length) { const t = list.reduce((x, a) => x + (a.time || 0), 0), ld = list.reduce((x, a) => x + (a.load || 0), 0);
       h += `<div class="card"><h2>${todays.length ? T("todayWk") : T("lastWk")}</h2>${todays.length ? `<p class="muted" style="margin:0 0 6px">${hm(t)}${ld ? ` · load ${r0(ld)}` : ""}</p>` : ""}${list.map(workoutButton).join("")}</div>`; } }
-  h += normalCard() + insightsCard();
+  h += sleepNeedCard(true) + normalCard() + insightsCard();
   v.innerHTML = h;
 }
 // 20-cell ASCII bar, filled to the score (terminal skin).
@@ -352,6 +354,83 @@ function suggestion(level, rides) {
   if (level === "calib") return "Ride by feel; the app is still learning your normal resting HR.";
   if (!rides.length) return "Good day for a first proper ride: 45–60 min, easy to steady.";
   return `Good day to push: try a ride of ~${Math.round(longest * 1.15)} km (longest so far ${longest.toFixed(1)} km), or add a few hard 3-min efforts.`;
+}
+
+/* ---------- Early warning: illness / overreaching ---------- */
+// Smartwatch studies (Radin 2020 Lancet Digital Health; Mishra 2020 Nature BME) saw resting HR rise ~5+ bpm over the
+// personal baseline, often with higher night breathing rate, 1–3 days before symptoms. Rules (my thresholds):
+//   alert = RHR ≥ baseline+5 (or ≥2 SD) on BOTH of the last 2 mornings AND night breathing or sleep stress up ≥1.5 SD
+//   watch = RHR up on the latest morning only, or 2 mornings without the breathing/stress confirmation
+// Baseline = the 28 days before the last 3, so a developing illness doesn't raise its own baseline.
+function earlyWarning() {
+  const W = db.wellness.filter(w => w.rhr); if (W.length < 20) return null;
+  const last2 = W.slice(-2), base = W.slice(-31, -3).map(w => w.rhr); if (base.length < 14) return null;
+  const m = mean(base), d = Math.max(sd(base), 1.5), up = w => w.rhr - m >= Math.max(5, 2 * d);
+  const gb = k => { const v = (db.garmin || []).slice(-31, -3).map(r => r[k]).filter(x => x != null); return v.length >= 10 ? [mean(v), Math.max(sd(v), .3)] : null; };
+  const rB = gb("sleepResp"), sB = gb("sleepStress");
+  const conf = w => { const g = G(w.d); if (!g) return null; const hits = [];
+    if (rB && g.sleepResp != null && (g.sleepResp - rB[0]) / rB[1] >= 1.5) hits.push(`breathing ${g.sleepResp.toFixed(1)}/min (usual ${rB[0].toFixed(1)})`);
+    if (sB && g.sleepStress != null && (g.sleepStress - sB[0]) / sB[1] >= 1.5) hits.push(`sleep stress ${r0(g.sleepStress)} (usual ${r0(sB[0])})`);
+    return hits; };
+  const today = last2[last2.length - 1]; if (daysAgo(today.d) > 1) return null;   // stale data: say nothing
+  const both = last2.length === 2 && last2.every(up), c = conf(today) || [];
+  const rhrTxt = `resting HR ${today.rhr} (usual ${r0(m)})`;
+  if (both && c.length) return { level: "alert", text: `Possible illness or overreaching: ${rhrTxt} two mornings running, ${c.join(", ")}.`, tip: "Take an easy day, sleep early, skip hard efforts until it settles." };
+  if (both || up(today)) return { level: "watch", text: `Elevated ${rhrTxt}${both ? " two mornings running" : ""}.${c.length ? " Also " + c.join(", ") + "." : ""}`, tip: "Could be a hard session, alcohol, a late meal or something starting. Keep today easy and see tomorrow." };
+  return null;
+}
+function warningCard() {
+  const e = earlyWarning(); if (!e) return "";
+  return `<div class="warnbar ${e.level === "alert" ? "alert" : ""}" role="alert"><b>${e.level === "alert" ? "⚠ " : ""}${esc(e.text)}</b><br>${esc(e.tip)}</div>`;
+}
+
+/* ---------- Personal sleep need + bedtime target ---------- */
+// Broken-stick fit on your own nights: Body Battery at wake = a + b·min(sleep, k). k (searched 6:00–9:00 in 5-min steps,
+// least squares) is the sleep length after which more sleep stopped helping you = your sleep need.
+// Sleep = deep+light+REM (time actually asleep). Needs 30+ nights with a real spread of lengths.
+function sleepNeed() {
+  const rows = (db.garmin || []).filter(r => r.bbWake != null && r.deep != null).map(r => [(r.deep + (r.light || 0) + (r.rem || 0)) / 3600, r.bbWake]).filter(p => p[0] > 3 && p[0] < 12);
+  if (rows.length < 30 || sd(rows.map(p => p[0])) < .4) return null;
+  let best = null;
+  for (let k = 6; k <= 9.001; k += 1 / 12) {
+    const X = rows.map(([x]) => Math.min(x, k)), Y = rows.map(p => p[1]), mx = mean(X), my = mean(Y);
+    const sxx = X.reduce((t, x) => t + (x - mx) ** 2, 0); if (sxx < 1e-6) continue;
+    const b = X.reduce((t, x, i) => t + (x - mx) * (Y[i] - my), 0) / sxx, a = my - b * mx;
+    const sse = X.reduce((t, x, i) => t + (Y[i] - a - b * x) ** 2, 0);
+    if (!best || sse < best.sse) best = { k, a, b, sse };
+  }
+  // Only trust the personal number if the effect is real: ≥4 Body Battery per hour AND short vs enough nights differ
+  // beyond chance (Welch t). Otherwise fall back to the 7h adult guideline and say so.
+  const below = rows.filter(p => p[0] < (best ? best.k : 7) - .5).map(p => p[1]), above = rows.filter(p => p[0] >= (best ? best.k : 7)).map(p => p[1]);
+  if (!best || best.b < 4 || welch(above, below) == null || mean(above) <= mean(below)) return { need: 7, guideline: true, n: rows.length };
+  return { need: best.k, edge: best.k > 8.95, perHour: best.b, n: rows.length, gain: mean(above) - mean(below) };
+}
+// Bedtime = usual wake time (median of last 14 nights) − need − your median time awake in bed.
+function bedtimePlan() {
+  const N = sleepNeed(); if (!N) return null;
+  const rows = (db.garmin || []).filter(r => r.bed && r.wake).slice(-14); if (rows.length < 5) return null;
+  const med = a => [...a].sort((x, y) => x - y)[a.length >> 1];
+  const wakeM = med(rows.map(r => (r.wake / 6e4) % 1440)), awakeM = med(rows.map(r => (r.awake || 0) / 60));
+  const bed = ((wakeM - N.need * 60 - awakeM) % 1440 + 1440) % 1440, usualBed = med(rows.map(r => bedMin(r.bed))) % 1440;
+  return { ...N, wakeM, bedM: bed, lateBy: ((usualBed - bed + 720 + 1440) % 1440) - 720 };
+}
+function bedCalLink(bedM) {
+  const wind = (bedM - 30 + 1440) % 1440, p2 = n => String(n).padStart(2, "0"), d = iso(new Date()).replace(/-/g, "");
+  const t = m => `${p2(Math.floor(m / 60))}${p2(Math.round(m % 60))}00`;
+  const q = new URLSearchParams({ action: "TEMPLATE", text: "Wind down: bed in 30 min", dates: `${d}T${t(wind)}/${d}T${t((wind + 15) % 1440)}`,
+    details: "Screens off, lights low. Your Garmin Hub bedtime target.", recur: "RRULE:FREQ=DAILY" });
+  return "https://calendar.google.com/calendar/render?" + q;
+}
+function sleepNeedCard(compact) {
+  const P = bedtimePlan(); if (!P) return compact ? "" : `<div class="card"><h2>Your sleep need</h2><p class="muted">Needs 30+ nights of Garmin sleep data with some short and some long nights.</p></div>`;
+  const late = P.lateBy > 10 ? `Your usual bedtime is ${r0(P.lateBy)} min later than that.` : "Your usual bedtime already fits.";
+  if (compact) return `<div class="card"><h2>${T("tonight")}</h2><p class="big">Bed by <b>${hhmm(P.bedM)}</b></p><p class="muted" style="margin:0">For ${hm(P.need * 3600)} of sleep${P.guideline ? " (guideline)" : ""} and your usual ${hhmm(P.wakeM)} wake-up. ${late}</p></div>`;
+  return `<div class="card"><h2>Your sleep need</h2><p class="big"><b>${P.edge ? "9h+" : hm(P.need * 3600)}</b> of actual sleep${P.guideline ? " <small class=\"muted\">(guideline)</small>" : ""}</p>
+    <p style="margin:4px 0">${P.guideline ? "Your nights don't show a clear personal threshold yet, so this uses the adult 7h guideline. It updates as nights accumulate."
+      : `Below that, each hour less cost you about <b>${r0(P.perHour)} Body Battery</b> at wake; above it, more sleep barely helped. Nights at your need woke up <b>${r0(P.gain)} higher</b>.`}</p>
+    <p style="margin:8px 0 4px">To wake at ${hhmm(P.wakeM)}: <b>bed by ${hhmm(P.bedM)}</b>. ${late}</p>
+    <a class="btnlink" href="${bedCalLink(P.bedM)}" target="_blank" rel="noopener">Add daily wind-down reminder (${hhmm((P.bedM - 30 + 1440) % 1440)})</a>
+    <p class="muted note">From ${P.n} of your nights. Wake time = median of the last 2 weeks.</p></div>`;
 }
 
 /* ---------- Visual building blocks (plain SVG/HTML strings; tooltips via data-tip, see #vtip handler) ---------- */
@@ -896,7 +975,7 @@ function renderSleep(v) {
     : `<p class="muted">Needs at least 3 rides after short sleep and 3 after a full night to compare.</p>`;
   // Without Garmin bed times the timing chart is empty, so fall back to a plain duration bar chart.
   const timing = sleepTimingCard();
-  v.innerHTML = (timing || `<div class="card"><h2>Sleep, last 30 nights</h2><p class="muted" style="margin:0 0 6px">Average ${have.length ? hm(mean(have) * 3600) : "–"} · under 6h on ${have.filter(x => x < 6).length} nights</p><div id="slC"></div></div>`)
+  v.innerHTML = sleepNeedCard(false) + (timing || `<div class="card"><h2>Sleep, last 30 nights</h2><p class="muted" style="margin:0 0 6px">Average ${have.length ? hm(mean(have) * 3600) : "–"} · under 6h on ${have.filter(x => x < 6).length} nights</p><div id="slC"></div></div>`)
     + stagesCard() + (shortS.length >= 3 && longS.length >= 3 ? `<div class="card"><h2>Sleep vs your rides</h2>${cmp}</div>` : "");
   if (!timing) barChart($("#slC"), { x: W.map(w => w.d), values: S, color: css("--s1"), label: "Sleep", fmt: v => v.toFixed(0) + "h", tipFmt: v => hm(v * 3600) });
 }
@@ -926,8 +1005,10 @@ function demoData() {
   A.sort((x, y) => x.date.localeCompare(y.date));
   const garmin = W.map((w, k) => { const R2 = rng(k + 7), bed = Date.parse(w.d + "T00:00:00Z") - (60 + R2() * 90) * 6e4 + Math.max(0, 7 * 3600 - w.sleep) * 600;   // short nights = later bedtimes
     return { d: w.d, bbWake: Math.round(Math.max(15, Math.min(100, 30 + (w.sleep / 3600 - 5) * 14 + (R2() - .5) * 20))), bbHigh: 100, bbLow: Math.round(5 + R2() * 25), stress: Math.round(18 + R2() * 25),
-      imMod: Math.round(R2() * 40), imVig: Math.round(R2() * 15), deep: 3600 + R2() * 2400, light: 12000 + R2() * 4000, rem: 4200 + R2() * 2400, awake: 600 + R2() * 1200,
+      imMod: Math.round(R2() * 40), imVig: Math.round(R2() * 15), deep: w.sleep * (.15 + R2() * .06), light: w.sleep * (.5 + R2() * .06), rem: w.sleep * (.2 + R2() * .04), awake: 600 + R2() * 1200,
       bed, wake: bed + w.sleep * 1000, sleepStress: Math.round(12 + R2() * 14) }; });
+  garmin.forEach(g => { g.sleepResp = 14 + (rng(g.d.length + +g.d.slice(-2))() - .5); });
+  if (location.search.includes("sick")) { W.slice(-2).forEach(w => w.rhr += 9); garmin[garmin.length - 1].sleepResp = 17.5; }   // ?demo&sick previews the alert
   const out = { wellness: W, acts: A.reverse(), garmin, at: Date.now(), demo: true }; deriveLoad(out); return out;
 }
 function demoStreams(a) {
