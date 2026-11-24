@@ -1,0 +1,5 @@
+# Health data and secrets never go into git
+.env
+data/
+node_modules/
+*.fit
