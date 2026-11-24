@@ -271,12 +271,12 @@ function renderToday(v) {
 const asciiBar = s => "[" + "█".repeat(Math.round(s / 5)) + "░".repeat(20 - Math.round(s / 5)) + "]";
 // Gym Wall: readiness → the hardest colour circuit worth trying today (typical gym scale, easiest first).
 // [name, tape colour, text colour, grade written on the tape, min readiness]
-const CIRCUITS = [["Yellow", "#f2c21b", "#1c1c1c", "5a", 0], ["Green", "#2fae57", "#fff", "5c", 35], ["Blue", "#2f6fd6", "#fff", "6a+", 55],
-  ["Red", "#d63a2a", "#fff", "6b+", 70], ["Black", "#151517", "#f1efe9", "7a", 85]];
+const CIRCUITS = [["Yellow", "#d9b93a", "#1c1c1c", "5a", 0], ["Green", "#3f8a52", "#fff", "5c", 35], ["Blue", "#3a65a0", "#fff", "6a+", 55],
+  ["Red", "#b0433a", "#fff", "6b+", 70], ["Black", "#151517", "#f1efe9", "7a", 85]];
 function circuits(score) {
   const s = score ?? 0, k = CIRCUITS.filter(c => s >= c[4]).length - 1;
   return `<div class="circuit">${CIRCUITS.map((c, i) => [c, i]).reverse().map(([c, i]) => `<div class="ct ${i > k ? "off" : i === k ? "on" : "ok"}" style="--tc:${c[1]};--tt:${c[2]}">
-    <i class="hold"></i><span class="tape">${c[3]}</span><b>${c[0]}</b><em>${i > k ? "not today" : i === k ? "send this" : "warm-up ✓"}</em></div>`).join("")}</div>
+    <span class="tape">${c[3]}</span><b>${c[0]}</b><em>${i > k ? "not today" : i === k ? "send this" : "warm-up ✓"}</em></div>`).join("")}</div>
     <p class="cscore">Readiness ${score == null ? "–" : score}/100</p>`;
 }
 // Player One: XP from everything the watch saw, so unlogged days still level you up.
