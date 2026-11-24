@@ -14,7 +14,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <!-- Fonts are decoration only: offline the app falls back to system fonts. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;800&family=JetBrains+Mono:wght@500;700&family=Audiowide&family=VT323&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;800&family=JetBrains+Mono:wght@500;700&family=Audiowide&family=VT323&family=Inter:wght@400;600;800&family=Bebas+Neue&display=swap" rel="stylesheet">
 <style>
 /* Cyber theme: one dark look on purpose (it's the app's identity). Series: cyan = slot 1, magenta = slot 2,
    picked far apart in hue AND lightness so fitness vs fatigue still separate for colour-blind eyes. */
@@ -164,6 +164,55 @@ a{color:var(--accent)}
 :root[data-skin="pro"] .chart path,:root[data-skin="pro"] .ring circle,:root[data-skin="pro"] .zones .bar{filter:none!important;box-shadow:none}
 :root[data-skin="pro"] .ring .num{text-shadow:none!important}
 :root[data-skin="pro"] #map .leaflet-tile-pane{filter:none}
+/* ON BELAY: rope-climbing gym. Grey wall with coloured holds, a rope down the left, cards clipped on carabiners */
+:root[data-skin="belay"]{
+  --acc-rgb:255,122,26; --bg:#1b1d21; --card:#24272c; --card2:#2a2d33; --line:#3a3e45; --ink:#f4f1ea; --ink2:#c2bdb2; --muted:#8a867e;
+  --s1:#ff7a1a; --s2:#2ec4b6; --good:#2ec4b6; --warn:#ffd23f; --bad:#ff4d6d; --accent:#ff7a1a; --glow:none;
+  --disp:"Bebas Neue",Impact,"Arial Narrow",sans-serif; --mono:Inter,system-ui,sans-serif;
+}
+/* wall: scattered holds (radial blobs on a 260px tile) over faint panel seams */
+:root[data-skin="belay"] body{font-family:Inter,system-ui,sans-serif;background:
+  radial-gradient(circle at 12% 18%,#ff7a1a 0 7px,transparent 8px),radial-gradient(circle at 70% 9%,#2ec4b6 0 5px,transparent 6px),
+  radial-gradient(ellipse 11px 7px at 44% 52%,#8e5cf7 0 100%,transparent),radial-gradient(circle at 88% 64%,#ffd23f 0 6px,transparent 7px),
+  radial-gradient(circle at 22% 83%,#ff4d6d 0 6px,transparent 7px),radial-gradient(ellipse 8px 12px at 61% 92%,#2ec4b6 0 100%,transparent),
+  linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px) 0 0/100% 130px,linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px) 0 0/130px 100%,
+  var(--bg);background-size:260px 260px,260px 260px,260px 260px,260px 260px,260px 260px,260px 260px,100% 130px,130px 100%,auto;background-attachment:fixed}
+/* dim the holds behind content so text stays readable */
+:root[data-skin="belay"] body::before{content:"";position:fixed;inset:0;background:rgba(27,29,33,.72);pointer-events:none;z-index:0}
+:root[data-skin="belay"] header,:root[data-skin="belay"] main,:root[data-skin="belay"] #status{position:relative;z-index:1}
+:root[data-skin="belay"] header h1{font-size:34px;letter-spacing:.04em;font-weight:400;text-transform:uppercase}
+:root[data-skin="belay"] header h1 small{font-family:Inter,sans-serif;letter-spacing:.3em;color:var(--accent)}
+:root[data-skin="belay"] .card h2{font-size:18px;font-weight:400;letter-spacing:.08em;color:var(--ink)}
+:root[data-skin="belay"] .card h2::before{content:"";display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--s2);margin-right:8px;vertical-align:2px}
+:root[data-skin="belay"] .tile span,:root[data-skin="belay"] nav button,:root[data-skin="belay"] label,:root[data-skin="belay"] .plan span{font-family:Inter,sans-serif;font-weight:700;letter-spacing:.06em;font-size:10px}
+:root[data-skin="belay"] .tile b{font-family:"Bebas Neue",Impact,sans-serif;font-weight:400;font-size:30px;letter-spacing:.02em}
+:root[data-skin="belay"] .verdict h3{font-size:26px;font-weight:400}
+:root[data-skin="belay"] .ring .num{font-weight:400;font-size:38px}
+:root[data-skin="belay"] .tile{background:rgba(255,255,255,.035);border:0;border-left:3px solid var(--s2)}
+:root[data-skin="belay"] .tiles .tile:nth-child(3n+2){border-left-color:var(--s1)} :root[data-skin="belay"] .tiles .tile:nth-child(3n){border-left-color:#8e5cf7}
+/* the rope: twisted orange/white kernmantle down the left of the content */
+:root[data-skin="belay"] main{padding-left:38px}
+:root[data-skin="belay"] main::before{content:"";position:absolute;left:17px;top:6px;bottom:0;width:7px;border-radius:4px;z-index:0;
+  background:repeating-linear-gradient(160deg,#ff7a1a 0 5px,#fff3e6 5px 7px,#e0601a 7px 12px);box-shadow:0 0 0 1px rgba(0,0,0,.35)}
+/* each card hangs from a carabiner (::before) on a quickdraw sling (::after) */
+:root[data-skin="belay"] .card{border-radius:10px;overflow:visible}
+:root[data-skin="belay"] .card::before{content:"";width:12px;height:22px;top:16px;left:-29px;border:3px solid #c9ced6;border-radius:7px;opacity:1;background:transparent;transform-origin:50% -6px}
+:root[data-skin="belay"] .card::after{content:"";width:16px;height:4px;bottom:auto;right:auto;top:26px;left:-17px;border:0;border-radius:2px;background:#2ec4b6;opacity:1}
+:root[data-skin="belay"] .plan{border-color:rgba(46,196,182,.5)}
+:root[data-skin="belay"] nav{background:rgba(27,29,33,.95)}
+@media (prefers-reduced-motion:no-preference){
+  /* belayer taking in: the rope texture creeps upward */
+  :root[data-skin="belay"] main::before{animation:rope 2.8s linear infinite}
+  @keyframes rope{to{background-position:0 -36px}}
+  /* clip-in: the carabiner swings and settles when a card appears */
+  :root[data-skin="belay"] .card::before{animation:clip 1.4s cubic-bezier(.3,1.6,.5,1) both}
+  @keyframes clip{0%{transform:rotate(38deg)}35%{transform:rotate(-22deg)}60%{transform:rotate(10deg)}80%{transform:rotate(-4deg)}100%{transform:rotate(0)}}
+  :root[data-skin="belay"] main .card:nth-child(2)::before{animation-delay:.15s} :root[data-skin="belay"] main .card:nth-child(3)::before{animation-delay:.3s}
+  /* chalk puff: a white cloud blooms and fades over each new card */
+  :root[data-skin="belay"] .card{animation:chalk .9s ease-out both}
+  @keyframes chalk{0%{opacity:0;box-shadow:0 0 0 0 rgba(255,255,255,.55);transform:translateY(8px)}40%{opacity:1;box-shadow:0 0 30px 14px rgba(255,255,255,.18)}100%{box-shadow:0 0 0 0 rgba(255,255,255,0);transform:none}}
+}
+
 /* main-screen bits */
 .plan{margin-top:12px;padding:10px 12px;border-radius:8px;border:1px dashed rgba(var(--acc-rgb),.35);font-size:14px}
 .plan span{display:block;font:600 10px var(--disp);letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:3px}
@@ -251,6 +300,7 @@ main .card:nth-child(2){animation-delay:.06s} main .card:nth-child(3){animation-
       <div class="skins">
         <button data-skin="cyber">Cyber HUD</button><button data-skin="synth">Synthwave</button>
         <button data-skin="term">Terminal</button><button data-skin="pro">Pro (light)</button>
+        <button data-skin="belay">On Belay</button>
       </div>
     </div>
   </main>

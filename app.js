@@ -15,7 +15,10 @@ let cfg = LS.get("gh.cfg", { key: "", athlete: "0" });
 let db = LS.get("gh.db", null);            // {wellness:[...asc by date], acts:[...desc by date], at, demo}
 let tab = LS.get("gh.tab", "today");
 // Skin = CSS token set on <html data-skin>; ?skin=x in the URL overrides (for previews/screenshots).
-const SKIN_BAR = { cyber: "#06080c", synth: "#10051c", term: "#020802", pro: "#f2f3f5" };
+const SKIN_BAR = { cyber: "#06080c", synth: "#10051c", term: "#020802", pro: "#f2f3f5", belay: "#1b1d21" };
+// Readiness score → French sport-climbing grade, for the On Belay skin (4 = rest day … 7a = send day).
+const GRADES = ["4", "5a", "5b", "5c", "6a", "6a+", "6b", "6b+", "6c", "7a"];
+const gradeOf = s => GRADES[Math.min(GRADES.length - 1, Math.max(0, Math.floor(s / 10)))];
 function setSkin(s) {
   if (!SKIN_BAR[s]) s = "cyber";
   document.documentElement.dataset.skin = s;
@@ -203,9 +206,13 @@ function renderToday(v) {
   if (latest && daysAgo(latest.d) >= 2) h += `<div class="warnbar"><b>Watch last synced ${daysAgo(latest.d)} days ago.</b> Open Garmin Connect on your phone and let it sync, which also refreshes GPS satellite data so your next ride locks faster. Then tap Sync here.</div>`;
   const rides = db.acts.filter(isRide);
   if (R) {
-    const V = { hard: ["Go hard", css("--good")], moderate: ["Moderate", css("--warn")], easy: ["Take it easy", css("--bad")], calib: ["Calibrating", css("--s1")] }[R.level];
+    // On Belay speaks in belay calls; other skins use plain words.
+    const belay = skin === "belay";
+    const V = { hard: [belay ? "Climb on!" : "Go hard", css("--good")], moderate: [belay ? "Top rope day" : "Moderate", css("--warn")],
+      easy: [belay ? "Take!" : "Take it easy", css("--bad")], calib: [belay ? "On belay?" : "Calibrating", css("--s1")] }[R.level];
     const notes = R.level === "calib" ? [`<li>Learning your normal: ${R.need} more day${R.need === 1 ? "" : "s"} of watch data needed.</li>`] : [];
-    h += `<div class="card"><h2>Readiness · ${short(R.last.d)}</h2><div class="verdict">${ring(R.score ?? null, V[1], R.level === "calib" ? "WAIT" : "READY")}<div><h3 style="color:${V[1]}">${V[0]}</h3>
+    const ringLabel = R.level === "calib" ? "WAIT" : belay ? "GRADE " + gradeOf(R.score) : "READY";
+    h += `<div class="card"><h2>Readiness · ${short(R.last.d)}</h2><div class="verdict">${ring(R.score ?? null, V[1], ringLabel)}<div><h3 style="color:${V[1]}">${V[0]}</h3>
       <ul>${notes.join("")}${R.flags.map(f => `<li class="flag">${esc(f)}</li>`).join("")}${R.good.map(f => `<li>${esc(f)}</li>`).join("")}</ul></div></div>
       <div class="plan"><span>Today's plan</span>${esc(suggestion(R.level, rides))}</div></div>`;
   }
