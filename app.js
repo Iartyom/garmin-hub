@@ -117,7 +117,7 @@ function deriveLoad(d) {
   const by = {}; d.acts.forEach(a => { const day = a.date.slice(0, 10); by[day] = (by[day] || 0) + (a.load || 0); });
   let ctl = 0, atl = 0; d.wellness.forEach(w => { const l = by[w.d] || 0; ctl += (l - ctl) / 42; atl += (l - atl) / 7; w.ctl = ctl; w.atl = atl; });
 }
-const APP_VER = "v19";   // keep in step with CACHE in sw.js; shown after sync so it's obvious which build the phone runs
+const APP_VER = "v20";   // keep in step with CACHE in sw.js; shown after sync so it's obvious which build the phone runs
 async function sync() {
   if (!cfg.key) { openSettings(); return; }
   status("Syncing…");
@@ -372,7 +372,7 @@ function normalRow(label, vals, fmt, downGood) {
   const word = inside ? "Normal for you" : `${z > 0 ? "Higher" : "Lower"} than usual · ${good ? "good" : "watch"}`;
   return `<div class="nrow"${tipAttr(`${label}: ${fmt(last)} · usual ${fmt(lo)}–${fmt(hi)}`)}><div class="nhead"><span>${esc(label)}</span><b>${fmt(last)}</b></div>
     <div class="rstrip"><i class="rband" style="left:${pos(lo).toFixed(1)}%;width:${(pos(hi) - pos(lo)).toFixed(1)}%"></i><i class="rdot ${inside ? "" : good ? "g" : "b"}" style="left:${pos(last).toFixed(1)}%"></i></div>
-    <div class="nfoot"><span>usual ${fmt(lo).replace(/ [^\d\s]+$/, "")} – ${fmt(hi)}</span><em class="${inside ? "muted" : good ? "up-good" : "up-bad"}">${inside ? "" : z > 0 ? "▲ " : "▼ "}${word}</em></div></div>`;
+    <div class="nfoot"><span>usual ${String(fmt(lo)).replace(/ [^\d\s]+$/, "")} – ${fmt(hi)}</span><em class="${inside ? "muted" : good ? "up-good" : "up-bad"}">${inside ? "" : z > 0 ? "▲ " : "▼ "}${word}</em></div></div>`;
 }
 const series = (days, f) => { const out = []; for (let i = days - 1; i >= 0; i--) { const d = iso(new Date(Date.now() - i * 864e5)); out.push([d, f(d)]); } return out; };
 function normalCard() {
