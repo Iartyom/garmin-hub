@@ -105,6 +105,19 @@ function mergeActs(iv, ga) {
 // Garmin row for a date (or undefined). Index rebuilt lazily when db changes.
 let gIdx = null, gIdxOf = null;
 const G = d => { if (!db || !db.garmin) return undefined; if (gIdxOf !== db.garmin) { gIdx = Object.fromEntries(db.garmin.map(r => [r.d, r])); gIdxOf = db.garmin; } return gIdx[d]; };
+// Banister TRIMP for activities without a load (all Garmin-history ones): minutes × HR reserve × 0.64·e^(k·HRR),
+// k = 1.92 men / 1.67 women. Rest HR = median resting HR, max HR = highest seen in any activity (floor 170).
+// When Garmin history is present, fitness (42-day) and fatigue (7-day) are rebuilt from every activity's load,
+// replacing Intervals' values, which only knew about the activities it imported.
+function deriveLoad(d) {
+  const rh = d.wellness.map(w => w.rhr).filter(Boolean).sort((a, b) => a - b); if (!rh.length) return;
+  const rest = rh[rh.length >> 1], mx = Math.max(170, ...d.acts.map(a => a.maxHr || 0)), k = profile.sex === "f" ? 1.67 : 1.92;
+  d.acts.forEach(a => { if (a.load == null && a.hr && a.time) { const r = Math.max(0, Math.min(1, (a.hr - rest) / (mx - rest))); a.load = Math.round(a.time / 60 * r * .64 * Math.exp(k * r)); } });
+  if (!d.acts.some(a => a.src === "garmin")) return;
+  const by = {}; d.acts.forEach(a => { const day = a.date.slice(0, 10); by[day] = (by[day] || 0) + (a.load || 0); });
+  let ctl = 0, atl = 0; d.wellness.forEach(w => { const l = by[w.d] || 0; ctl += (l - ctl) / 42; atl += (l - atl) / 7; w.ctl = ctl; w.atl = atl; });
+}
+const APP_VER = "v17";   // keep in step with CACHE in sw.js; shown after sync so it's obvious which build the phone runs
 async function sync() {
   if (!cfg.key) { openSettings(); return; }
   status("Syncing…");
@@ -120,8 +133,9 @@ async function sync() {
       acts: mergeActs(a.map(slimA), ga ? ga.filter(g => g.date >= iso(addDays(now, -365))) : null),
       garmin: gx, at: Date.now(),
     };
+    deriveLoad(db);
     LS.set("gh.db", db);
-    status(gErr || `Synced ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}${gx ? " · Garmin extras ✓" : ""}`);
+    status(gErr || `Synced ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}${gx ? " · Garmin extras ✓" : ""} · ${APP_VER}`);
     render();
   } catch (e) {
     // A browser network failure surfaces as TypeError; say so instead of a cryptic "Failed to fetch".
@@ -388,6 +402,7 @@ const bedMin = ts => { const m = (ts / 6e4) % 1440; return m < 720 ? m + 1440 : 
 const hhmm = m => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(Math.round(m % 60)).padStart(2, "0")}`;
 function insightsCard() {
   const gx = db.garmin || [], byW = Object.fromEntries(db.wellness.map(w => [w.d, w])), out = [];
+  const byG = Object.fromEntries(gx.map(r => [r.d, r]));
   const next = d => iso(addDays(parseDay(d), 1));
   const add = (title, la, a, lb, b, fmt, unit) => { const t = welch(a, b); if (t == null) return;
     const ma = mean(a), mb = mean(b), mx = Math.max(ma, mb) || 1;
@@ -404,7 +419,7 @@ function insightsCard() {
   const sb = gx.filter(r => r.bbWake != null && byW[r.d]?.sleep);
   add(`A full <b>7 h+</b> night vs a short one, measured in Body Battery at wake.`, "7 h+", sb.filter(r => byW[r.d].sleep >= 7 * 3600).map(r => r.bbWake), "Under 7 h", sb.filter(r => byW[r.d].sleep < 7 * 3600).map(r => r.bbWake), r0, "");
   // 3) active day → deep sleep that night (deep is stored on the wake-up date = next day)
-  const byG = Object.fromEntries(gx.map(r => [r.d, r])), act = gx.filter(r => byG[next(r.d)]?.deep);
+  const act = gx.filter(r => byG[next(r.d)]?.deep);
   const im = r => (r.imMod || 0) + 2 * (r.imVig || 0);
   add(`Days with <b>30+ intensity minutes</b> vs quiet days: deep sleep the following night.`, "Active day", act.filter(r => im(r) >= 30).map(r => byG[next(r.d)].deep / 60),
     "Quiet day", act.filter(r => im(r) < 30).map(r => byG[next(r.d)].deep / 60), r0, " min");
@@ -416,9 +431,22 @@ function insightsCard() {
   const cs = gx.filter(r => r.stress);
   add(`Commute days vs other days: average <b>stress</b>.`, "Commute", cs.filter(r => commute.days.includes(parseDay(r.d).getDay())).map(r => r.stress),
     "Other", cs.filter(r => !commute.days.includes(parseDay(r.d).getDay())).map(r => r.stress), r0, "");
+  // 6) workout yesterday (walks excluded) vs rest day → Body Battery this morning
+  const prevD = d => iso(addDays(parseDay(d), -1)), trainD = new Set(db.acts.filter(a => kindOf(a) !== "walk").map(a => a.date.slice(0, 10)));
+  const bbN = gx.filter(r => r.bbWake != null);
+  add(`The morning after a <b>workout</b> vs after a rest day: Body Battery at wake.`, "After workout", bbN.filter(r => trainD.has(prevD(r.d))).map(r => r.bbWake),
+    "After rest", bbN.filter(r => !trainD.has(prevD(r.d))).map(r => r.bbWake), r0, "");
+  // 7) evening workouts (start 18:00+) vs earlier → deep sleep that night (stored on the wake-up date)
+  const hourD = h => new Set(db.acts.filter(a => kindOf(a) !== "walk" && h(+a.date.slice(11, 13))).map(a => a.date.slice(0, 10)));
+  const lateD = hourD(h => h >= 18), earlyD = hourD(h => h < 18), deepAfter = set => gx.filter(r => set.has(r.d) && byG[next(r.d)]?.deep).map(r => byG[next(r.d)].deep / 60);
+  add(`Training <b>in the evening</b> (after 18:00) vs earlier in the day: deep sleep that night.`, "Evening", deepAfter(lateD), "Earlier", deepAfter(earlyD), r0, " min");
+  // 8) day after a workout → resting HR (works without Garmin extras too)
+  const rhN = db.wellness.filter(w => w.rhr);
+  add(`Resting HR the morning <b>after a workout</b> vs after a rest day.`, "After workout", rhN.filter(w => trainD.has(prevD(w.d))).map(w => w.rhr),
+    "After rest", rhN.filter(w => !trainD.has(prevD(w.d))).map(w => w.rhr), v => v.toFixed(1), " bpm");
   out.sort((a, b) => b.t - a.t);
-  return `<div class="card"><h2>${T("insights")}</h2>${out.length ? out.slice(0, 4).map(o => o.html).join("")
-    : `<p class="muted">${db.garmin ? "No pattern strong enough yet." : "Connect Garmin extras in Settings to unlock this."}</p>`}
+  return `<div class="card"><h2>${T("insights")}</h2>${out.length ? out.slice(0, 5).map(o => o.html).join("")
+    : `<p class="muted">${db.garmin ? "No pattern strong enough yet." : "Connect Garmin extras in Settings to unlock more."}</p>`}
     <p class="muted note">Only differences unlikely to be chance. Patterns, not proof of cause.</p></div>`;
 }
 // Sleep timing: one floating bar per night from bedtime to wake on a clock axis (20:00 → 11:00), median bedtime marked.
@@ -579,6 +607,33 @@ function workoutButton(a) {
   return `<button class="ride" data-ride="${esc(a.id)}"><div class="row"><span class="t"><span class="kind k-${k}">${kindName(k)}</span> ${esc(a.name || a.type)}</span><span class="muted">${dayName(a.date)}</span></div>
     <div class="m">${meta}</div></button>`;
 }
+// "Getting fitter?" per sport from GPS sessions: pace/speed and efficiency (metres per heartbeat) trends with 95% CI.
+// Efficiency is the cleanest fitness signal from a watch: same speed at a lower heart rate = fitter.
+// Consistency line: weeks (of the last 12) with 2+ non-walk workouts, and the current streak.
+function progressCard(k) {
+  const now = Date.now(), x = a => (Date.parse(a.date) - now) / 864e5, rows = [];
+  const row = (label, xs, f, fmt, unit, upGood) => {
+    const pts = xs.map(a => [x(a), f(a)]).filter(p => isFinite(p[1]) && p[1] > 0), L = linreg(pts); if (!L) return;
+    const recent = mean(pts.slice(-5).map(p => p[1])), m = L.b * 30, sig = Math.abs(L.b) > L.ci, good = (m > 0) === upGood;
+    rows.push(`<tr><td>${label}</td><td>${fmt(recent)}</td><td>${m >= 0 ? "+" : "−"}${fmt(Math.abs(m), true)}${unit}/mo</td>
+      <td class="${sig ? (good ? "up-good" : "up-bad") : "muted"}">${sig ? (good ? "▲ better" : "▼ worse") : "steady"}</td></tr>`);
+  };
+  const gps = kk => db.acts.filter(a => kindOf(a) === kk && a.dist > 1000 && a.time > 300 && a.spd).sort((a, b) => a.date.localeCompare(b.date));
+  const eff = a => a.hr ? a.spd * 60 / a.hr : NaN;   // metres per heartbeat
+  const paceS = a => 1000 / a.spd;                      // seconds per km
+  const fmtPace = (v, d) => d ? `${r0(v)} s` : `${Math.floor(v / 60)}:${String(Math.round(v % 60)).padStart(2, "0")}`;
+  const want = kk => k === "all" || k === kk;
+  if (want("run")) { const R = gps("run"); row("Run pace /km", R, paceS, fmtPace, "", false); row("Run m / beat", R, eff, v => v.toFixed(2), "", true); }
+  if (want("ride")) { const R = gps("ride"); row("Ride km/h", R, a => a.spd * 3.6, v => v.toFixed(1), "", true); row("Ride m / beat", R, eff, v => v.toFixed(2), "", true); }
+  if (want("walk")) { const R = gps("walk"); row("Walk pace /km", R, paceS, fmtPace, "", false); }
+  const mon = weekStart(iso(new Date())), wks = []; for (let i = 0; i < 12; i++) wks.push(iso(addDays(parseDay(mon), -7 * i)));
+  const n = w => db.acts.filter(a => kindOf(a) !== "walk" && weekStart(a.date) === w).length;
+  const active = wks.filter(w => n(w) >= 2).length; let streak = 0; for (const w of wks.slice(n(mon) >= 2 ? 0 : 1)) { if (n(w) >= 2) streak++; else break; }
+  if (!rows.length && !active) return "";
+  return `<div class="card"><h2>Getting fitter?</h2><p class="muted" style="margin:0 0 6px">Active weeks (2+ workouts, walks not counted): ${active} of 12 · streak ${streak}</p>
+    ${rows.length ? `<table><tr><th></th><th>Recent</th><th>Trend</th><th></th></tr>${rows.join("")}</table>
+    <p class="muted note">m / beat = metres per heartbeat: higher at the same effort = fitter. "Steady" = no change beyond chance.</p>` : ""}</div>`;
+}
 // List split by month with a session count + total time per header, so a long year stays scannable.
 function monthGroups(list) {
   const by = []; list.forEach(a => { const m = a.date.slice(0, 7); if (!by.length || by[by.length - 1][0] !== m) by.push([m, []]); by[by.length - 1][1].push(a); });
@@ -606,6 +661,7 @@ function renderRides(v) {
     ${wkFilter === "ride" && list.length ? (() => { const tot = list.reduce((t, a) => t + (a.dist || 0), 0), lg = Math.max(...list.map(a => a.dist || 0)), sp = list.slice(1, 11).filter(a => a.spd), l = list[0];
       const tile = (val, lab) => `<div class="tile"><span>${lab}</span><b>${val}</b></div>`;
       return `<div class="card"><div class="tiles">${tile(km(tot), "km this year")}${tile(km(lg), "Longest km")}${tile(kmh(l.spd), "Last km/h")}${sp.length ? tile(kmh(mean(sp.map(a => a.spd))), "Usual km/h") : ""}</div></div>`; })() : ""}
+    ${progressCard(wkFilter)}
     <div class="card"><h2>${wkFilter === "all" ? "All workouts" : kindName(wkFilter)} · ${list.length}</h2>${monthGroups(list.slice(0, 120)) || `<p class="muted">Nothing synced yet. Start an activity on the watch and it shows up here after Garmin Connect syncs.</p>`}</div>`;
   barChart($("#wkChart"), { x: wk, values: wk.map(w => minBy[w]), color: css("--s1"), label: "Time", fmt: v => v >= 60 ? (v / 60).toFixed(v >= 600 ? 0 : 1) + "h" : r0(v) + "m", tipFmt: v => hm(v * 60),
     xLabel: w => short(w), tipLabel: w => "Week of " + short(w) });
@@ -871,13 +927,13 @@ function demoData() {
     const time = { Run: 1800 + R3() * 1500, WeightTraining: 2700 + R3() * 1200, Walk: 2400 + R3() * 1800, RockClimbing: 4200 + R3() * 1800 }[t];
     A.push({ id: "d" + t + k, date: d + "T18:10:00", type: t, name: { Run: "Evening run", WeightTraining: "Gym", Walk: "Walk", RockClimbing: "Top rope session" }[t], time,
       dist: t === "Run" ? time * (2.7 + R3() * .4) : t === "Walk" ? time * 1.4 : 0, spd: t === "Run" ? 2.8 + R3() * .4 : t === "Walk" ? 1.4 : 0, climb: t === "Run" ? 40 : 0,
-      hr: { Run: 152, WeightTraining: 112, Walk: 98, RockClimbing: 121 }[t] + R3() * 8, maxHr: 175, kcal: time / 60 * (t === "Run" ? 11 : 6), load: time / 60 * (t === "Run" ? 1.1 : .5), zones: [] }); }
+      hr: { Run: 152, WeightTraining: 112, Walk: 98, RockClimbing: 121 }[t] + R3() * 8, maxHr: 175, kcal: time / 60 * (t === "Run" ? 11 : 6), src: "garmin", zones: [] }); }
   A.sort((x, y) => x.date.localeCompare(y.date));
   const garmin = W.map((w, k) => { const R2 = rng(k + 7), bed = Date.parse(w.d + "T00:00:00Z") - (60 + R2() * 90) * 6e4 + Math.max(0, 7 * 3600 - w.sleep) * 600;   // short nights = later bedtimes
     return { d: w.d, bbWake: Math.round(Math.max(15, Math.min(100, 30 + (w.sleep / 3600 - 5) * 14 + (R2() - .5) * 20))), bbHigh: 100, bbLow: Math.round(5 + R2() * 25), stress: Math.round(18 + R2() * 25),
       imMod: Math.round(R2() * 40), imVig: Math.round(R2() * 15), deep: 3600 + R2() * 2400, light: 12000 + R2() * 4000, rem: 4200 + R2() * 2400, awake: 600 + R2() * 1200,
       bed, wake: bed + w.sleep * 1000, sleepStress: Math.round(12 + R2() * 14) }; });
-  return { wellness: W, acts: A.reverse(), garmin, at: Date.now(), demo: true };
+  const out = { wellness: W, acts: A.reverse(), garmin, at: Date.now(), demo: true }; deriveLoad(out); return out;
 }
 function demoStreams(a) {
   const n = Math.round(a.time), R = rng(a.time | 0), time = [], hr = [], sp = [], ll = [];
