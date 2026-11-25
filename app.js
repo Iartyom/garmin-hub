@@ -77,7 +77,7 @@ async function api(path) {
 // Keep only what the screens use: a year of full wellness objects would blow the ~5MB storage limit.
 const slimW = w => ({ d: w.id, ctl: w.ctl, atl: w.atl, rhr: w.restingHR, hrv: w.hrv, sleep: w.sleepSecs, sleepScore: w.sleepScore, sleepQ: w.sleepQuality, steps: w.steps, vo2: w.vo2max, weight: w.weight, floors: w.floorsClimbed });   // Venu 2: no HRV, has floors
 const slimA = a => ({
-  id: a.id, date: a.start_date_local, type: a.type, name: a.name, dist: a.distance, time: a.moving_time,
+  id: a.id, date: a.start_date_local, type: a.type, name: a.name, dist: a.distance, time: a.moving_time, el: a.elapsed_time,
   climb: a.total_elevation_gain, spd: a.average_speed, maxSpd: a.max_speed, hr: a.average_heartrate,
   maxHr: a.max_heartrate, kcal: a.calories, load: a.icu_training_load, zones: a.icu_hr_zone_times, drift: a.decoupling,
 });
@@ -117,7 +117,7 @@ function deriveLoad(d) {
   const by = {}; d.acts.forEach(a => { const day = a.date.slice(0, 10); by[day] = (by[day] || 0) + (a.load || 0); });
   let ctl = 0, atl = 0; d.wellness.forEach(w => { const l = by[w.d] || 0; ctl += (l - ctl) / 42; atl += (l - atl) / 7; w.ctl = ctl; w.atl = atl; });
 }
-const APP_VER = "v23";   // keep in step with CACHE in sw.js; shown after sync so it's obvious which build the phone runs
+const APP_VER = "v24";   // keep in step with CACHE in sw.js; shown after sync so it's obvious which build the phone runs
 async function sync() {
   if (!cfg.key) { openSettings(); return; }
   status("Syncing…");
@@ -734,7 +734,8 @@ function renderRides(v) {
       ${im != null && im > log7 + 30 ? `<p class="note">Watch counted <b>${im} intensity min</b> this week vs ${r0(log7)} min recorded: some training wasn't saved as an activity.</p>` : ""}</div>
     ${wkFilter === "ride" && list.length ? (() => { const tot = list.reduce((t, a) => t + (a.dist || 0), 0), lg = Math.max(...list.map(a => a.dist || 0)), sp = list.slice(1, 11).filter(a => a.spd), l = list[0];
       const tile = (val, lab) => `<div class="tile"><span>${lab}</span><b>${val}</b></div>`;
-      return `<div class="card"><div class="tiles">${tile(km(tot), "km this year")}${tile(km(lg), "Longest km")}${tile(kmh(l.spd), "Last km/h")}${sp.length ? tile(kmh(mean(sp.map(a => a.spd))), "Usual km/h") : ""}</div></div>`; })() : ""}
+      const tt = list.reduce((t, a) => t + (a.time || 0), 0);
+      return `<div class="card"><div class="tiles">${tile(hm(l.time), "Last ride")}${tile(kmh(l.spd), "Last km/h")}${sp.length ? tile(kmh(mean(sp.map(a => a.spd))), "Usual km/h") : ""}${tile(km(tot), "km this year")}${tile(hm(tt), "Ride time this year")}${tile(km(lg), "Longest km")}</div></div>`; })() : ""}
     ${progressCard(wkFilter)}
     <div class="card"><h2>${wkFilter === "all" ? "All workouts" : kindName(wkFilter)} · ${list.length}</h2>${monthGroups(list.slice(0, 120)) || `<p class="muted">Nothing synced yet. Start an activity on the watch and it shows up here after Garmin Connect syncs.</p>`}</div>`;
   barChart($("#wkChart"), { x: wk, values: wk.map(w => minBy[w]), color: css("--s1"), label: "Time", fmt: v => v >= 60 ? (v / 60).toFixed(v >= 600 ? 0 : 1) + "h" : r0(v) + "m", tipFmt: v => hm(v * 60),
@@ -759,7 +760,7 @@ async function openRide(id) {
   const gps = a.dist > 50;   // indoor/gym sessions: no map, speed or distance
   body.innerHTML = `<p class="muted">${dayName(a.date)} · ${new Date(a.date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p>
     ${gps ? `<div id="map"></div>` : ""}
-    <div class="card"><div class="tiles">${gps ? tile(km(a.dist), "km") : ""}${tile(hm(a.time), "Moving")}${gps ? (kindOf(a) === "run" ? tile(pace(a.spd), "Pace /km") : tile(kmh(a.spd), "Avg km/h")) : ""}
+    <div class="card"><div class="tiles">${gps ? tile(km(a.dist), "km") : ""}${tile(hm(a.time), "Moving time")}${a.el && a.el - (a.time || 0) >= 60 ? tile(hm(a.el), "Total time") : ""}${gps ? (kindOf(a) === "run" ? tile(pace(a.spd), "Pace /km") : tile(kmh(a.spd), "Avg km/h")) : ""}
       ${gps ? tile(kmh(a.maxSpd), "Max km/h") : ""}${gps ? tile(r0(a.climb), "Climb m") : ""}${tile(r0(a.hr), "Avg HR")}${tile(r0(a.maxHr), "Max HR")}${a.kcal ? tile(r0(a.kcal), "kcal") : ""}${tile(r0(a.load), "Load")}${gps ? `<div class="tile" id="driftTile"><span>HR drift</span><b>…</b></div>` : ""}</div></div>
     <div class="card"><h2>Heart rate</h2><div id="hrC"></div></div>
     ${gps ? `<div class="card"><h2>Speed (km/h)</h2><div id="spC"></div></div>` : ""}
