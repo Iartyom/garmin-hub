@@ -117,7 +117,7 @@ function deriveLoad(d) {
   const by = {}; d.acts.forEach(a => { const day = a.date.slice(0, 10); by[day] = (by[day] || 0) + (a.load || 0); });
   let ctl = 0, atl = 0; d.wellness.forEach(w => { const l = by[w.d] || 0; ctl += (l - ctl) / 42; atl += (l - atl) / 7; w.ctl = ctl; w.atl = atl; });
 }
-const APP_VER = "v24";   // keep in step with CACHE in sw.js; shown after sync so it's obvious which build the phone runs
+const APP_VER = "v25";   // keep in step with CACHE in sw.js; shown after sync so it's obvious which build the phone runs
 async function sync() {
   if (!cfg.key) { openSettings(); return; }
   status("Syncing…");
@@ -708,6 +708,41 @@ function progressCard(k) {
     ${rows.length ? `<table><tr><th></th><th>Recent</th><th>Trend</th><th></th></tr>${rows.join("")}</table>
     <p class="muted note">m / beat = metres per heartbeat: higher at the same effort = fitter. "Steady" = no change beyond chance.</p>` : ""}</div>`;
 }
+// Trend charts per sport for the Workouts tab: each session as a point (x = session order, last 12 months)
+// plus a 5-session rolling average, which is the line to read. One metric per chart (no dual axes).
+// Returns [{id, title, note, x, vals, fmt}] for sports with 4+ GPS sessions; renderTrends() draws them.
+function trendSpecs(k) {
+  const yr = iso(addDays(new Date(), -365)), want = kk => k === "all" || k === kk, out = [];
+  const gps = kk => db.acts.filter(a => kindOf(a) === kk && a.dist > 1000 && a.time > 300 && a.spd && a.date >= yr).sort((a, b) => a.date.localeCompare(b.date)).slice(-60);
+  const mmss = v => `${Math.floor(v / 60)}:${String(Math.round(v % 60)).padStart(2, "0")}`;
+  const add = (id, title, note, xs, f, fmt) => { const vals = xs.map(f); if (vals.filter(v => isFinite(v) && v > 0).length >= 4) out.push({ id, title, note, x: xs.map(a => a.date.slice(0, 10)), vals, fmt }); };
+  const eff = a => a.hr ? a.spd * 60 / a.hr : NaN;
+  if (want("ride")) { const R = gps("ride");
+    // Time only means something for the same route: use commute rides (commute days, usual distance) when there are 4+.
+    const C = commuteRides(R), useC = C.length >= 4;
+    add("trRideT", useC ? "Commute time" : "Ride time", useC ? "Lower = quicker commute (moving time, commute rides only)." : "Moving time per ride. Set commute days in ⚙ to track just your commute.", useC ? C : R, a => a.time / 60, v => hm(v * 60));
+    add("trRideS", "Ride speed · km/h", "Higher = faster.", R, a => a.spd * 3.6, v => v.toFixed(1));
+    add("trRideE", "Ride efficiency · m / beat", "Higher = same speed at a lower heart rate = fitter.", R, eff, v => v.toFixed(2)); }
+  if (want("run")) { const R = gps("run");
+    add("trRunP", "Run pace · /km", "Lower = faster.", R, a => 1000 / a.spd, mmss);
+    add("trRunE", "Run efficiency · m / beat", "Higher = same pace at a lower heart rate = fitter.", R, eff, v => v.toFixed(2)); }
+  if (want("walk")) { const R = gps("walk");
+    add("trWalkP", "Walk pace · /km", "Lower = brisker.", R, a => 1000 / a.spd, mmss); }
+  // "All": one headline chart per sport (time/pace) to keep the page short; pick a sport chip for the rest.
+  return k === "all" ? out.filter(t => /[TP]$/.test(t.id)) : out;
+}
+function trendCard(k) {
+  const T = trendSpecs(k); if (!T.length) return "";
+  return `<div class="card"><h2>Trends · 12 months</h2>${T.map(t => `<h3 class="mhead"><span>${t.title}</span></h3><div id="${t.id}"></div><p class="muted note">${t.note}</p>`).join("")}</div>`;
+}
+function renderTrends(k) {
+  for (const t of trendSpecs(k)) {
+    const avg = t.vals.map((_, i) => { const w = t.vals.slice(Math.max(0, i - 4), i + 1).filter(v => isFinite(v) && v > 0); return w.length >= 3 ? mean(w) : null; });
+    lineChart($("#" + t.id), { x: t.x, height: 140, fmt: t.fmt, tipFmt: t.fmt, series: [
+      { name: "Session", short: "", values: t.vals.map(v => isFinite(v) && v > 0 ? v : null), color: css("--muted") },
+      { name: "5-session average", short: "avg", values: avg, color: css("--s1") }] });
+  }
+}
 // List split by month with a session count + total time per header, so a long year stays scannable.
 function monthGroups(list) {
   const by = []; list.forEach(a => { const m = a.date.slice(0, 7); if (!by.length || by[by.length - 1][0] !== m) by.push([m, []]); by[by.length - 1][1].push(a); });
@@ -737,9 +772,11 @@ function renderRides(v) {
       const tt = list.reduce((t, a) => t + (a.time || 0), 0);
       return `<div class="card"><div class="tiles">${tile(hm(l.time), "Last ride")}${tile(kmh(l.spd), "Last km/h")}${sp.length ? tile(kmh(mean(sp.map(a => a.spd))), "Usual km/h") : ""}${tile(km(tot), "km this year")}${tile(hm(tt), "Ride time this year")}${tile(km(lg), "Longest km")}</div></div>`; })() : ""}
     ${progressCard(wkFilter)}
+    ${trendCard(wkFilter)}
     <div class="card"><h2>${wkFilter === "all" ? "All workouts" : kindName(wkFilter)} · ${list.length}</h2>${monthGroups(list.slice(0, 120)) || `<p class="muted">Nothing synced yet. Start an activity on the watch and it shows up here after Garmin Connect syncs.</p>`}</div>`;
   barChart($("#wkChart"), { x: wk, values: wk.map(w => minBy[w]), color: css("--s1"), label: "Time", fmt: v => v >= 60 ? (v / 60).toFixed(v >= 600 ? 0 : 1) + "h" : r0(v) + "m", tipFmt: v => hm(v * 60),
     xLabel: w => short(w), tipLabel: w => "Week of " + short(w) });
+  renderTrends(wkFilter);
 }
 // Aerobic decoupling from the streams: speed-per-heartbeat in the first vs second half of moving time.
 // Under 5% = solid endurance at that pace; rising drift on the same route = fatigue or heat.
