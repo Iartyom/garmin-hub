@@ -139,7 +139,7 @@ function fillFromGarmin(d) {
   }
   d.wellness = Object.values(by).sort((x, y) => x.d.localeCompare(y.d));
 }
-const APP_VER = "v26";   // keep in step with CACHE in sw.js; shown after sync so it's obvious which build the phone runs
+const APP_VER = "v27";   // keep in step with CACHE in sw.js; shown after sync so it's obvious which build the phone runs
 async function sync() {
   if (!cfg.key) { openSettings(); return; }
   status("Syncing…");
@@ -240,7 +240,7 @@ function barChart(el, o) {
   let g = "";
   for (let k = 0; k <= 3; k++) { const v = hi * k / 3, y = ys(v); g += `<line class="grid" x1="${L}" x2="${W - R}" y1="${y}" y2="${y}"/><text class="axis" x="${L - 4}" y="${y + 4}" text-anchor="end">${fmt(v)}</text>`; }
   vals.forEach((v, i) => { const x = L + i * slot + 1, y = ys(v); g += `<path data-i="${i}" d="${barPath(x, y, bw, H - B - y, 4)}" fill="${o.color}"/><rect data-i="${i}" x="${L + i * slot}" y="${T}" width="${slot}" height="${H - T - B}" fill="transparent"/>`; });
-  [0, n - 1].forEach((i, k) => g += `<text class="axis" x="${L + i * slot + slot / 2}" y="${H - 4}" text-anchor="${k ? "end" : "start"}">${esc(o.xLabel ? o.xLabel(o.x[i]) : short(o.x[i]))}</text>`);
+  (o.allLabels ? vals.map((_, i) => i) : [0, n - 1]).forEach((i, k) => g += `<text class="axis" x="${L + i * slot + slot / 2}" y="${H - 4}" text-anchor="${o.allLabels ? "middle" : k ? "end" : "start"}">${esc(o.xLabel ? o.xLabel(o.x[i]) : short(o.x[i]))}</text>`);
   el.innerHTML = `<div class="chart"><svg viewBox="0 0 ${W} ${H}" height="${H}">${g}</svg><div class="tip"></div></div>`;
   const svg = $("svg", el), tip = $(".tip", el);
   const show = ev => {
@@ -612,6 +612,68 @@ function intensityCard() {
     <p class="muted note">Everything the watch saw, logged or not. Dashed line = WHO 150.</p></div>`;
 }
 
+/* ---------- Patterns: steps per day, when you exercise ---------- */
+// Under 500 steps = watch off or dead, not a lazy day; counting those would drag every average down.
+const WORN_STEPS = 500;
+const WD = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];   // Monday-first, same as the week charts
+const wdIdx = d => (parseDay(d).getDay() + 6) % 7;
+const kSteps = v => v >= 1000 ? (v / 1000).toFixed(v >= 10000 ? 0 : 1) + "k" : r0(v);
+// Steps card markup; charts are drawn by drawSteps() once the card is in the DOM.
+function stepsCard() {
+  const worn = db.wellness.slice(-fitRange).filter(w => w.steps >= WORN_STEPS); if (worn.length < 7) return "";
+  // Weekday profile always uses the last 90 days: a 42-day window gives each weekday only ~6 points.
+  const r90 = db.wellness.filter(w => w.steps >= WORN_STEPS && daysAgo(w.d) <= 90);
+  const by = WD.map((_, i) => r90.filter(w => wdIdx(w.d) === i).map(w => w.steps)), avg = by.map(a => a.length ? mean(a) : null);
+  const idx = avg.map((_, i) => i).filter(i => avg[i] != null && by[i].length >= 3).sort((a, b) => avg[b] - avg[a]);
+  // Commute days vs the rest, only from the first commute ride on (before that a Tuesday is just a Tuesday).
+  const since = commuteSince(), cd = r90.filter(w => since && w.d >= since);
+  const isC = w => commute.days.includes(parseDay(w.d).getDay());
+  const cA = cd.filter(isC).map(w => w.steps), cB = cd.filter(w => !isC(w)).map(w => w.steps);
+  const hit = worn.filter(w => w.steps >= 8000).length;
+  return `<div class="card"><h2>Steps per day</h2>
+    <p class="muted" style="margin:0 0 6px">Average ${r0(mean(worn.map(w => w.steps))).toLocaleString()} · 8k+ on ${hit} of ${worn.length} days worn${fitRange > 90 ? " · weekly averages" : ""}</p>
+    <div id="stC"></div>
+    <h2 style="margin-top:14px">By weekday <small class="muted">last 90 days</small></h2><div id="stWd"></div>
+    ${idx.length >= 2 ? `<p class="note">Most on <b>${WD[idx[0]]}</b> (${kSteps(avg[idx[0]])}), least on <b>${WD[idx[idx.length - 1]]}</b> (${kSteps(avg[idx[idx.length - 1]])}).${cA.length >= 4 && cB.length >= 4 ? ` Commute days ${kSteps(mean(cA))} vs other days ${kSteps(mean(cB))}.` : ""}</p>` : ""}
+    <p class="muted note">Days under ${WORN_STEPS} steps count as watch off and are left out.</p></div>`;
+}
+function drawSteps() {
+  const el = $("#stC"); if (!el) return;
+  const V = db.wellness.slice(-fitRange), stp = w => w.steps >= WORN_STEPS ? w.steps : null;
+  if (fitRange > 90) {
+    // A year of daily bars is sub-pixel on a phone: average per week instead (worn days only).
+    const wk = {}; V.forEach(w => { const v = stp(w); if (v == null) return; (wk[weekStart(w.d)] ||= []).push(v); });
+    const ks = Object.keys(wk).sort();
+    barChart(el, { x: ks, values: ks.map(k => mean(wk[k])), color: css("--s1"), label: "Avg steps/day", fmt: kSteps, tipFmt: v => r0(v).toLocaleString(), tipLabel: k => "Week of " + short(k) });
+  } else barChart(el, { x: V.map(w => w.d), values: V.map(stp), color: css("--s1"), label: "Steps", fmt: kSteps, tipFmt: v => r0(v).toLocaleString() });
+  const r90 = db.wellness.filter(w => w.steps >= WORN_STEPS && daysAgo(w.d) <= 90);
+  const by = WD.map((_, i) => r90.filter(w => wdIdx(w.d) === i).map(w => w.steps));
+  barChart($("#stWd"), { x: WD, values: by.map(a => a.length ? mean(a) : null), color: css("--s1"), label: "Avg steps", fmt: kSteps, tipFmt: v => r0(v).toLocaleString(),
+    allLabels: true, xLabel: d => d, tipLabel: d => `${d} · ${by[WD.indexOf(d)].length} days`, height: 120 });
+}
+// When you exercise: weekday x time of day over the last 12 months, shaded by session count (one hue, light -> dark).
+const SLOTS = [["Early", 0, 8], ["Morning", 8, 12], ["Afternoon", 12, 17], ["Evening", 17, 24]];
+function patternCard(list) {
+  const yr = list.filter(a => daysAgo(a.date.slice(0, 10)) <= 365); if (yr.length < 4) return "";
+  const cnt = SLOTS.map(() => WD.map(() => 0));
+  yr.forEach(a => { const h = +a.date.slice(11, 13), si = SLOTS.findIndex(x => h >= x[1] && h < x[2]); if (si >= 0) cnt[si][wdIdx(a.date)]++; });
+  const mx = Math.max(...cnt.flat()), top = []; cnt.forEach((r, si) => r.forEach((c, d) => top.push([c, si, d]))); top.sort((a, b) => b[0] - a[0]);
+  const slotName = si => SLOTS[si][0].toLowerCase();
+  const cell = (c, si, d) => `<span style="background:rgba(var(--acc-rgb),${c ? (.18 + .82 * c / mx).toFixed(2) : .05});color:${c / mx > .55 ? "var(--bg)" : "var(--ink2)"}"${tipAttr(`${WD[d]} ${slotName(si)}: ${c} session${c === 1 ? "" : "s"}`)}>${c || ""}</span>`;
+  // Rhythm over the last 12 weeks: weeks with any session, sessions per week, longest break between sessions.
+  const mon = weekStart(iso(new Date())), wks = []; for (let k = 11; k >= 0; k--) wks.push(iso(addDays(parseDay(mon), -7 * k)));
+  const per = wks.map(w => list.filter(a => weekStart(a.date) === w).length), active = per.filter(Boolean).length;
+  const days = [...new Set(list.filter(a => daysAgo(a.date.slice(0, 10)) <= 84).map(a => a.date.slice(0, 10)))].sort();
+  let gap = 0; days.forEach((d, i) => { if (i) gap = Math.max(gap, daysAgo(days[i - 1]) - daysAgo(d)); });
+  const last = list[0] ? daysAgo(list[0].date.slice(0, 10)) : null;
+  return `<div class="card"><h2>When you train <small class="muted">${yr.length} sessions · 12 months</small></h2>
+    <div class="heat"><b></b>${WD.map(d => `<b>${d.slice(0, 2)}</b>`).join("")}
+      ${SLOTS.map((x, si) => `<i>${x[0]}</i>${cnt[si].map((c, d) => cell(c, si, d)).join("")}`).join("")}</div>
+    <p class="note">Most often: <b>${WD[top[0][2]]} ${slotName(top[0][1])}</b>${top[1] && top[1][0] ? `, then ${WD[top[1][2]]} ${slotName(top[1][1])}` : ""}.
+      Last 12 weeks: active in <b>${active} of 12</b> weeks, ${(per.reduce((a, b) => a + b, 0) / 12).toFixed(1)} sessions/week${gap > 7 ? `, longest break ${gap} days` : ""}${last != null && last > 7 ? `. Last session ${last} days ago` : ""}.</p>
+    <p class="muted note">Early before 8:00 · Morning 8–12 · Afternoon 12–17 · Evening after 17. Follows the filter above.</p></div>`;
+}
+
 /* ---------- Garmin extras on Today ---------- */
 // Clock time from Garmin's "local timestamp" (ms, local wall-clock encoded as if UTC).
 const clock = ts => ts == null ? "–" : new Date(ts).toISOString().slice(11, 16);
@@ -777,6 +839,7 @@ function renderRides(v) {
       const tile = (val, lab) => `<div class="tile"><span>${lab}</span><b>${val}</b></div>`;
       const tt = list.reduce((t, a) => t + (a.time || 0), 0);
       return `<div class="card"><div class="tiles">${tile(hm(l.time), "Last ride")}${tile(kmh(l.spd), "Last km/h")}${sp.length ? tile(kmh(mean(sp.map(a => a.spd))), "Usual km/h") : ""}${tile(km(tot), "km this year")}${tile(hm(tt), "Ride time this year")}${tile(km(lg), "Longest km")}</div></div>`; })() : ""}
+    ${patternCard(list)}
     ${trendCard(wkFilter)}
     <div class="card"><h2>${wkFilter === "all" ? "All workouts" : kindName(wkFilter)} · ${list.length}</h2>${monthGroups(list.slice(0, 120)) || `<p class="muted">Nothing synced yet. Start an activity on the watch and it shows up here after Garmin Connect syncs.</p>`}</div>`;
   barChart($("#wkChart"), { x: wk, values: wk.map(w => minBy[w]), color: css("--s1"), label: "Time", fmt: v => v >= 60 ? (v / 60).toFixed(v >= 600 ? 0 : 1) + "h" : r0(v) + "m", tipFmt: v => hm(v * 60),
@@ -863,6 +926,7 @@ function renderFitness(v) {
     ${normalCard()}
     <div class="row" style="margin-bottom:10px"><span class="muted">Chart range</span><div class="seg">${[42, 90, 365].map(r => `<button data-range="${r}" class="${r === fitRange ? "on" : ""}">${r === 365 ? "1 year" : r + " days"}</button>`).join("")}</div></div>
     <div class="card"><h2>Resting HR</h2><div id="rhC"></div></div>
+    ${stepsCard()}
     ${enough ? `<div class="card"><h2>Fitness &amp; fatigue</h2><div id="ffC"></div>
       <p class="muted note">Fitness = 6-week training load, fatigue = 1-week. All recorded activities, by heart rate.</p></div>
     <div class="card"><h2>Form (fitness − fatigue)</h2><div id="formC"></div>
@@ -877,6 +941,7 @@ function renderFitness(v) {
   // VO2max updates only every few days; nulls between would break the line into invisible dots, so plot measured days only.
   const VV = V.filter(w => w.vo2);
   lineChart($("#voC"), { x: VV.map(w => w.d), series: [{ name: "VO2max", color: css("--s1"), values: VV.map(w => w.vo2) }], height: 120, minSpan: 4 });
+  drawSteps();
   if (!enough) return;
   const x = W.map(w => w.d);
   lineChart($("#ffC"), { x, series: [{ name: "Fitness", short: "Fit", color: css("--s1"), values: W.map(w => w.ctl) }, { name: "Fatigue", short: "Fat", color: css("--s2"), values: W.map(w => w.atl) }] });
@@ -1048,7 +1113,7 @@ function demoData() {
   const R3 = rng(99);
   for (let k = 0; k < 40; k++) { const d = iso(new Date(Date.now() - (k * 4 + 1) * 864e5)), t = ["Run", "WeightTraining", "Walk", "RockClimbing"][k % 4];
     const time = { Run: 1800 + R3() * 1500, WeightTraining: 2700 + R3() * 1200, Walk: 2400 + R3() * 1800, RockClimbing: 4200 + R3() * 1800 }[t];
-    A.push({ id: "d" + t + k, date: d + "T18:10:00", type: t, name: { Run: "Evening run", WeightTraining: "Gym", Walk: "Walk", RockClimbing: "Top rope session" }[t], time,
+    A.push({ id: "d" + t + k, date: d + ["T07:05:00", "T12:40:00", "T18:10:00"][k % 3], type: t, name: { Run: "Evening run", WeightTraining: "Gym", Walk: "Walk", RockClimbing: "Top rope session" }[t], time,
       dist: t === "Run" ? time * (2.7 + R3() * .4) : t === "Walk" ? time * 1.4 : 0, spd: t === "Run" ? 2.8 + R3() * .4 : t === "Walk" ? 1.4 : 0, climb: t === "Run" ? 40 : 0,
       hr: { Run: 152, WeightTraining: 112, Walk: 98, RockClimbing: 121 }[t] + R3() * 8, maxHr: 175, kcal: time / 60 * (t === "Run" ? 11 : 6), src: "garmin", zones: [] }); }
   A.sort((x, y) => x.date.localeCompare(y.date));
