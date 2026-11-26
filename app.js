@@ -139,7 +139,7 @@ function fillFromGarmin(d) {
   }
   d.wellness = Object.values(by).sort((x, y) => x.d.localeCompare(y.d));
 }
-const APP_VER = "v27";   // keep in step with CACHE in sw.js; shown after sync so it's obvious which build the phone runs
+const APP_VER = "v28";   // keep in step with CACHE in sw.js; shown after sync so it's obvious which build the phone runs
 async function sync() {
   if (!cfg.key) { openSettings(); return; }
   status("Syncing…");
@@ -307,6 +307,8 @@ function renderToday(v) {
   if (latest && daysAgo(latest.d) >= 2) h += `<div class="warnbar"><b>Watch last synced ${daysAgo(latest.d)} days ago.</b> Open Garmin Connect on your phone and let it sync, which also refreshes GPS satellite data so your next ride locks faster. Then tap Sync here.</div>`;
   h += warningCard();   // illness/overreaching banner sits above everything when it fires
   const rides = db.acts.filter(isRide);
+  // Order answers: am I OK lately → how is today going → what my body says this morning → what to do.
+  h += statusCard() + todayCard();
   if (skin === "game") h += xpCard(rides);
   if (R) {
     const col = { hard: css("--good"), moderate: css("--warn"), easy: css("--bad"), calib: css("--s1") }[R.level];
@@ -332,6 +334,64 @@ function renderToday(v) {
       h += `<div class="card"><h2>${todays.length ? T("todayWk") : T("lastWk")}</h2>${todays.length ? `<p class="muted" style="margin:0 0 6px">${hm(t)}${ld ? ` · load ${r0(ld)}` : ""}</p>` : ""}${list.map(workoutButton).join("")}</div>`; } }
   h += sleepNeedCard(true) + insightsCard();
   v.innerHTML = h;
+}
+/* ---------- "Am I in a good place?" + "Today so far" ---------- */
+// Readiness is one morning; "a good place" is weeks. Last 14 days vs your own previous 90 days (days 15-104 ago) plus
+// absolute floors (7h sleep, 8k steps, WHO 150 intensity min/week). Each row needs 5+ days of data or it's skipped.
+const winVals = (from, to, f) => db.wellness.filter(w => { const a = daysAgo(w.d); return a >= from && a <= to; }).map(f).filter(v => v != null && !isNaN(v));
+function statusRows() {
+  const rows = [], add = (name, st, val, cmp) => rows.push({ name, st, val, cmp });
+  const asleep = w => { const g = G(w.d); return g && g.deep != null ? (g.deep + (g.light || 0) + (g.rem || 0)) / 3600 : w.sleep ? w.sleep / 3600 : null; };
+  const sl = winVals(0, 13, asleep), slB = winVals(14, 104, asleep);
+  if (sl.length >= 5) { const m = mean(sl), b = slB.length >= 14 ? mean(slB) : null;
+    add("Sleep", m >= 7 ? "good" : m < 6.5 || (b && m < b - .5) ? "watch" : "ok", hm(m * 3600) + "/night", b ? `usual ${hm(b * 3600)} · target 7h` : "target 7h"); }
+  const rh = winVals(0, 13, w => w.rhr || null), rhB = winVals(14, 104, w => w.rhr || null);
+  if (rh.length >= 5 && rhB.length >= 14) { const d = mean(rh) - mean(rhB);
+    // Resting HR creeping up 3+ bpm for two weeks = under-recovered, stressed or getting sick; drifting down = fitter.
+    add("Resting HR", d >= 3 ? "watch" : d <= -1 ? "good" : "ok", r0(mean(rh)) + " bpm", `usual ${r0(mean(rhB))} · ${d >= 0 ? "+" : "−"}${Math.abs(d).toFixed(1)}`); }
+  const stp = w => w.steps >= WORN_STEPS ? w.steps : null, st = winVals(1, 14, stp), stB = winVals(15, 104, stp);   // today is partial: from yesterday back
+  if (st.length >= 5) { const m = mean(st), b = stB.length >= 14 ? mean(stB) : null;
+    add("Steps", m >= 8000 ? "good" : m < 5000 || (b && m < b * .75) ? "watch" : "ok", kSteps(m) + "/day", b ? `usual ${kSteps(b)} · target 8k` : "target 8k"); }
+  if (db.garmin) {
+    const g14 = db.garmin.filter(r => { const a = daysAgo(r.d); return a >= 1 && a <= 14 && (r.hrMin != null || r.bbHigh != null); });
+    if (g14.length >= 5) { const wk = g14.reduce((t, r) => t + (r.imMod || 0) + 2 * (r.imVig || 0), 0) / g14.length * 7;   // per worn day → per week
+      add("Exercise", wk >= 150 ? "good" : wk < 75 ? "watch" : "ok", r0(wk) + " min/week", "intensity min · WHO 150"); }
+    const sr = g14.map(r => r.stress).filter(v => v > 0), srB = db.garmin.filter(r => { const a = daysAgo(r.d); return a >= 15 && a <= 104 && r.stress > 0; }).map(r => r.stress);
+    if (sr.length >= 5 && srB.length >= 14) { const m = mean(sr), b = mean(srB);
+      add("Stress", m >= b + 5 || m > 50 ? "watch" : m <= b - 3 || m <= 30 ? "good" : "ok", r0(m) + " avg", `usual ${r0(b)} · Garmin 0–100`); }
+  }
+  // Training = logged sessions excluding walks, 14 days vs your usual fortnight (previous 90 days / 90 × 14).
+  const tr = a => kindOf(a) !== "walk", n14 = db.acts.filter(a => tr(a) && daysAgo(a.date.slice(0, 10)) <= 13).length;
+  const nB = db.acts.filter(a => tr(a) && daysAgo(a.date.slice(0, 10)) >= 14 && daysAgo(a.date.slice(0, 10)) <= 104).length / 90 * 14;
+  if (nB >= 1 || n14) add("Training", n14 === 0 ? "watch" : n14 >= Math.max(2, nB * .8) ? "good" : "ok", `${n14} session${n14 === 1 ? "" : "s"}`, `usual ~${nB.toFixed(0)} per 2 weeks`);
+  return rows;
+}
+function statusCard() {
+  const rows = statusRows(); if (rows.length < 3) return "";
+  const bad = rows.filter(r => r.st === "watch"), good = rows.filter(r => r.st === "good");
+  const lvl = bad.length >= 2 ? "bad" : bad.length ? "warn" : "good";
+  const head = lvl === "good" ? (good.length >= rows.length - 1 ? "You're in a good place" : "Steady, nothing off")
+    : lvl === "warn" ? `Mostly good · ${bad[0].name.toLowerCase()} needs attention` : `Run down · ${bad.map(r => r.name.toLowerCase()).join(", ")}`;
+  const ico = { good: "✓", ok: "·", watch: "!" };
+  return `<div class="card status ${lvl}"><h2>How you're doing · last 2 weeks</h2><h3 class="type st-${lvl}">${head}</h3>
+    ${rows.map(r => `<div class="srow"><span class="sic st-${r.st === "watch" ? "bad" : r.st === "good" ? "good" : "ok"}">${ico[r.st]}</span><span>${r.name}</span><b>${r.val}</b><small class="muted">${r.cmp}</small></div>`).join("")}
+    <p class="muted note">Compared with your previous 3 months and the usual health targets. ✓ good · · normal · ! worth fixing.</p></div>`;
+}
+// Today so far: whatever the watch has synced today (Garmin pull every ~3h + Intervals on Sync).
+function todayCard() {
+  const td = iso(new Date()), g = G(td) || {}, w = db.wellness.find(x => x.d === td) || {};
+  const steps = Math.max(g.steps || 0, w.steps || 0), usual = winVals(1, 30, x => x.steps >= WORN_STEPS ? x.steps : null);
+  const im = (g.imMod || 0) + 2 * (g.imVig || 0), acts = db.acts.filter(a => a.date.slice(0, 10) === td && kindOf(a) !== "walk");
+  if (!steps && g.bbNow == null && !acts.length) return `<div class="card"><h2>Today so far</h2><p class="muted" style="margin:0">Nothing from the watch yet today. Open Garmin Connect so the watch syncs, then tap Sync.</p></div>`;
+  const tile = (val, lab, sub) => `<div class="tile"><span>${lab}</span><b>${val}</b>${sub ? `<small>${sub}</small>` : ""}</div>`;
+  const u = usual.length >= 7 ? mean(usual) : null;
+  return `<div class="card"><h2>Today so far</h2><div class="tiles">
+    ${tile(steps ? r0(steps).toLocaleString() : "–", "Steps", u ? `${r0(steps / u * 100)}% of your usual day` : "")}
+    ${g.bbNow != null ? tile(g.bbNow, "Body Battery", g.bbHigh != null ? `today ${g.bbLow ?? "–"}–${g.bbHigh}` : "") : g.bbWake != null ? tile(g.bbWake, "Body Battery", "at wake") : ""}
+    ${db.garmin ? tile(im + " min", "Intensity", `week ${imWeek()} of 150`) : ""}
+    ${g.stress > 0 ? tile(g.stress, "Stress", "avg so far") : ""}
+    ${tile(acts.length ? hm(acts.reduce((t, a) => t + (a.time || 0), 0)) : "none yet", "Workouts", acts.length ? acts.map(a => kindName(kindOf(a))).join(", ") : "")}
+  </div></div>`;
 }
 // 20-cell ASCII bar, filled to the score (terminal skin).
 const asciiBar = s => "[" + "█".repeat(Math.round(s / 5)) + "░".repeat(20 - Math.round(s / 5)) + "]";
